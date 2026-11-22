@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+export const config = { maxDuration: 60 };
+
 function reply(res, status, body) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
   return res.status(status).json(body);
