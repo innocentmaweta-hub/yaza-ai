@@ -652,3 +652,7 @@
   .explore-mode-grid,.explore-tools-grid { grid-template-columns:1fr; }
   .explore-mode-card,.explore-tools-grid button { padding:11px; }
 }
+
+
+/* ChatGPT-style prompt editing and message actions */
+.user-message-actions{display:flex;gap:8px;opacity:.72;transition:opacity .15s}.message:hover .user-message-actions,.user-message-actions:focus-within{opacity:1}.user-message-actions button,.prompt-edit-actions button{display:inline-flex;align-items:center;gap:6px;border:1px solid #34353e;border-radius:8px;background:#202127;color:#c9c9d1;padding:6px 9px;font-size:11px}.user-message-actions button:hover,.prompt-edit-actions button:hover{background:#2b2c34;color:#fff}.prompt-edit-panel{display:grid;gap:9px;width:100%}.prompt-edit-input{width:100%;min-height:100px;max-height:240px;resize:vertical;border:1px solid #55515b;border-radius:12px;background:#202127;color:#f1f0f4;padding:12px;line-height:1.55;outline:none}.prompt-edit-input:focus{border-color:#d77b65;box-shadow:0 0 0 2px #d77b6522}.prompt-edit-actions{display:flex;justify-content:flex-end;gap:8px}.prompt-edit-actions .prompt-edit-save{background:#d97861;border-color:#d97861;color:#fff;font-weight:600}.prompt-edit-actions button:disabled{opacity:.45;cursor:not-allowed}
