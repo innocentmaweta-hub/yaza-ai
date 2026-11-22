@@ -12,6 +12,18 @@ import {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+function LogoSlot({ className = "brand-mark", iconSize = 19 }) {
+  return <span className={className}>
+    <img src="/brand-logo.svg" alt="Yaza AI logo" onError={event => {
+      event.currentTarget.style.display = "none";
+      const fallback = event.currentTarget.nextElementSibling;
+      if (fallback) fallback.style.display = "grid";
+    }}/>
+    <span className="brand-mark-fallback"><Sparkles size={iconSize}/></span>
+  </span>;
+}
+
+
 const PROVIDERS = {
   openai: { label: "OpenAI", models: [{ id: "gpt-6.2-astra", label: "GPT-6.2 Astra" }, { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" }, { id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
   gemini: { label: "Gemini", models: [{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }] },
@@ -1157,13 +1169,13 @@ function App() {
   const modeDetails = CHAT_MODES[activeMode];
   const suggestions = modeDetails.prompts;
 
-  if (shareLoading) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><p>Loading shared conversation…</p></div></div>;
+  if (shareLoading) return <div className="shared-page"><div className="shared-card"><LogoSlot iconSize={20}/><p>Loading shared conversation…</p></div></div>;
   if (shareError && !sharedView && new URLSearchParams(window.location.search).has("share")) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><h1>Shared conversation unavailable</h1><p>{shareError}</p><a href="/">Open Yaza AI</a></div></div>;
-  if (sharedView) return <div className="shared-page"><header className="shared-topbar"><a href="/" className="shared-brand"><span className="brand-mark"><Sparkles size={17}/></span> yaza<span>ai</span></a><span><Link2 size={14}/> Shared conversation · Read only</span></header><main className="shared-content"><div className="shared-heading"><div className="eyebrow"><span></span> SHARED WITH YOU</div><h1>{sharedView.title || "Conversation"}</h1><p>Read-only copy · Attachments are not included</p></div>{(sharedView.messages || []).map((message,index) => <article className={`shared-message ${message.role}`} key={message.id || index}><div className="shared-message-author">{message.role === "assistant" ? <><Sparkles size={14}/> Yaza AI</> : "You"}</div><div className="shared-message-content">{renderMarkdown(message.content, code => navigator.clipboard?.writeText(code))}</div></article>)}<footer>Shared using <a href="/">Yaza AI</a></footer></main></div>;
+  if (sharedView) return <div className="shared-page"><header className="shared-topbar"><a href="/" className="shared-brand"><LogoSlot iconSize={17}/> yaza<span>ai</span></a><span><Link2 size={14}/> Shared conversation · Read only</span></header><main className="shared-content"><div className="shared-heading"><div className="eyebrow"><span></span> SHARED WITH YOU</div><h1>{sharedView.title || "Conversation"}</h1><p>Read-only copy · Attachments are not included</p></div>{(sharedView.messages || []).map((message,index) => <article className={`shared-message ${message.role}`} key={message.id || index}><div className="shared-message-author">{message.role === "assistant" ? <><Sparkles size={14}/> Yaza AI</> : "You"}</div><div className="shared-message-content">{renderMarkdown(message.content, code => navigator.clipboard?.writeText(code))}</div></article>)}<footer>Shared using <a href="/">Yaza AI</a></footer></main></div>;
   return <div className={`app-shell theme-${theme}`}>
     <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
       <div className="side-top">
-        <button className="brand" onClick={newChat} aria-label="Yaza AI home"><span className="brand-mark"><Sparkles size={19}/></span><span>yaza<span className="brand-ai">ai</span></span></button>
+        <button className="brand" onClick={newChat} aria-label="Yaza AI home"><LogoSlot iconSize={19}/><span>yaza<span className="brand-ai">ai</span></span></button>
         <button className="icon-btn side-collapse" onClick={() => setSidebarOpen(false)} title="Close sidebar"><PanelLeftClose size={18}/></button>
       </div>
       <button className="new-chat-btn" onClick={newChat}><SquarePen size={17}/> <span>New chat</span><span className="shortcut">⌘ K</span></button>
@@ -1220,7 +1232,7 @@ function App() {
       <header className="topbar">
         <div className="top-left">
           {!sidebarOpen && <button className="icon-btn" onClick={() => setSidebarOpen(true)}><Menu size={19}/></button>}
-          <span className="mobile-brand"><span className="brand-mark"><Sparkles size={16}/></span> yaza<span>ai</span></span>
+          <span className="mobile-brand"><LogoSlot iconSize={16}/> yaza<span>ai</span></span>
           <div className="model-controls">
             <div className="dropdown-wrap">
               <button className="model-button" onClick={() => { setProviderMenu(!providerMenu); setModelMenu(false); }}><span className={`provider-dot ${provider}`}></span>{PROVIDERS[provider].label}<ChevronDown size={14}/></button>
@@ -1398,7 +1410,7 @@ function App() {
     {memoryOpen && <div className="auth-backdrop" onClick={() => { setMemoryOpen(false); setEditingMemoryId(null); setMemoryDraft(""); }}>
       <section className="memory-dialog" onClick={event => event.stopPropagation()}>
         <button className="auth-close" onClick={() => { setMemoryOpen(false); setEditingMemoryId(null); setMemoryDraft(""); }} aria-label="Close"><X size={18}/></button>
-        <div className="auth-mark"><Sparkles size={21}/></div>
+        <LogoSlot className="auth-mark" iconSize={21}/>
         <h2>Yaza memory</h2>
         <p>Save useful details you want Yaza to remember across chats. You control what is stored and can edit or delete it anytime.</p>
         <form className="memory-form" onSubmit={saveMemory}>
