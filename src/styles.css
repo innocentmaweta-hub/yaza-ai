@@ -35,3 +35,8 @@
 /* Browser speech playback controls */
 .message-meta button.speaking-control{color:#f0a27f;background:#3a2927;border-radius:6px;padding:4px 7px}
 .message-meta button{display:inline-flex;align-items:center;gap:5px}
+
+
+/* Image creation mode */
+.tool-btn:disabled{opacity:.45;cursor:not-allowed}
+.sent-attachment{border-radius:8px;display:inline-flex;align-items:center;gap:6px}
