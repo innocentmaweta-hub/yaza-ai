@@ -1277,7 +1277,7 @@ function App() {
               <div className="settings-info-note">Top-ups are credited only after Yaza verifies the transaction directly with PayChangu. Model usage is reserved before a response and reconciled after completion.</div>
             </>}
           </section>}
-          {settingsTab==="usage" && <section className="settings-panel-section"><h2>Usage</h2><p className="settings-panel-intro">Review your Yaza request allowance and recent AI usage.</p>
+          {settingsTab==="usage" && <section className="settings-panel-section"><h2>Usage</h2><p className="settings-panel-intro">Review your request allowance, token usage and wallet charges.</p>
             {!session && <div className="settings-info-note">Sign in to see your account usage and wallet billing details.</div>}
             {usageLoading && <div className="settings-info-note">Loading your usage report…</div>}
             {usageError && <div className="settings-info-note">{usageError}</div>}
@@ -1288,6 +1288,7 @@ function App() {
                 <div className="usage-stat"><span>Estimated input tokens</span><strong>{Number(usageData.estimatedInputTokens || 0).toLocaleString()}</strong></div>
                 <div className="usage-stat"><span>Estimated output tokens</span><strong>{Number(usageData.estimatedOutputTokens || 0).toLocaleString()}</strong></div>
                 <div className="usage-stat"><span>Provider-reported cost this month</span><strong>${Number(usageData.reportedCostUsd || 0).toFixed(4)}</strong></div>
+                <div className="usage-stat"><span>Yaza wallet charges this month</span><strong>MK {(Number(usageData.billedAmountMinor || 0)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
                 <div className="usage-stat"><span>Requests without cost data</span><strong>{usageData.unpricedRequests}</strong></div>
               </div>
               <div className="settings-info-note">Token counts are approximate estimates based on text length. Provider-reported cost is shown only when the provider includes it (currently most consistently available through OpenRouter); it is not a complete invoice or billing statement.</div>
