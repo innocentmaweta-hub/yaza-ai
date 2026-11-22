@@ -50,13 +50,14 @@ create table if not exists public.conversation_shares (
 );
 create index if not exists conversation_shares_owner_conversation_idx
   on public.conversation_shares(user_id, conversation_id);
+create index if not exists conversation_shares_conversation_id_idx
+  on public.conversation_shares(conversation_id);
 alter table public.conversation_shares enable row level security;
+-- Share records and snapshots are accessed only by the authenticated server API
+-- after it verifies the owner. Do not expose the table directly through the Data API.
 drop policy if exists "Users manage their own conversation shares" on public.conversation_shares;
-create policy "Users manage their own conversation shares" on public.conversation_shares
-  for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
-grant select, insert, update, delete on public.conversation_shares to authenticated, service_role;
+revoke all privileges on public.conversation_shares from public, anon, authenticated;
+grant select, insert, update, delete on public.conversation_shares to service_role;
 
 alter table public.messages add column if not exists attachments jsonb not null default '[]'::jsonb;
 
