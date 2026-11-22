@@ -81,7 +81,21 @@ export default async function handler(req, res) {
     const { error: settleError } = await admin.rpc("settle_yaza_usage",{p_usage_id:usageId,p_actual_minor:reserveMinor});
     if (settleError) console.error("Yaza image wallet settlement error:",settleError.message);
     const mediaType = /^image\/(png|jpeg|webp)$/i.test(item.media_type || "") ? item.media_type : "image/png";
-    return res.status(200).json({ image: `data:${mediaType};base64,${item.b64_json}`, model, cost: Number.isFinite(data.usage?.cost) ? data.usage.cost : null, billedAmountMinor:reserveMinor, billingStatus:settleError ? "settlement_pending" : "settled" });
+    const imageBuffer = Buffer.from(item.b64_json,"base64");
+    if (imageBuffer.length > 10 * 1024 * 1024) { await release("Generated image exceeded the storage limit"); return res.status(413).json({ error:"The generated image is too large to save. Try a simpler image prompt." }); }
+    const fileId = randomUUID();
+    const extension = mediaType.includes("jpeg") ? "jpg" : mediaType.includes("webp") ? "webp" : "png";
+    const fileName = "yaza-image-" + new Date().toISOString().replace(/[:.]/g,"-") + "." + extension;
+    const path = userId + "/" + chatId + "/" + messageId + "/" + fileId + "-" + fileName;
+    const { error: uploadError } = await admin.storage.from("chat-attachments").upload(path,imageBuffer,{contentType:mediaType,upsert:false});
+    if (uploadError) {
+      await release("Generated image could not be saved to private storage");
+      console.error("Yaza generated image storage error:",uploadError.message);
+      return res.status(503).json({ error:"The image was created but could not be saved to your account. No wallet charge was made; please try again." });
+    }
+    const { error: settleError } = await admin.rpc("settle_yaza_usage",{p_usage_id:usageId,p_actual_minor:reserveMinor});
+    if (settleError) console.error("Yaza image wallet settlement error:",settleError.message);
+    return res.status(200).json({ attachment:{ id:fileId,name:fileName,type:mediaType,kind:"image",path }, model, cost:Number.isFinite(data.usage?.cost)?data.usage.cost:null, billedAmountMinor:reserveMinor, billingStatus:settleError?"settlement_pending":"settled" });
   } catch (error) {
     await release("Image generation request failed");
     console.error("Yaza image generation error:", error?.message || error);
