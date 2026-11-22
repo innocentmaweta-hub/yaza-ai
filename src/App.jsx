@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase.js";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import mammoth from "mammoth/mammoth.browser";
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 import {
   ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass,
   FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal,
@@ -74,13 +78,13 @@ function App() {
       const ids = (rows || []).map(row => row.id);
       let messageRows = [];
       if (ids.length) {
-        const result = await supabase.from("messages").select("id,conversation_id,role,content,provider,model,created_at").in("conversation_id", ids).order("created_at", { ascending: true });
+        const result = await supabase.from("messages").select("id,conversation_id,role,content,provider,model,attachments,created_at").in("conversation_id", ids).order("created_at", { ascending: true });
         if (result.error) throw result.error;
         messageRows = result.data || [];
       }
       const remoteChats = (rows || []).map(row => ({
         id: row.id, title: row.title, updatedAt: new Date(row.updated_at).getTime(),
-        messages: messageRows.filter(m => m.conversation_id === row.id).map(m => ({ id: m.id, role: m.role, content: m.content, provider: m.provider, model: m.model }))
+        messages: messageRows.filter(m => m.conversation_id === row.id).map(m => ({ id: m.id, role: m.role, content: m.content, provider: m.provider, model: m.model, attachments: m.attachments || [] }))
       }));
       if (remoteChats.length) { setChats(remoteChats); setActiveId(remoteChats[0].id); }
       setCloudStatus("Synced");
@@ -104,7 +108,7 @@ function App() {
           if (chat.messages.length) {
             const rows = chat.messages.map(message => ({
               id: message.id, conversation_id: chat.id, role: message.role, content: message.content,
-              provider: message.provider || null, model: message.model || null
+              provider: message.provider || null, model: message.model || null, attachments: message.attachments || []
             }));
             const { error } = await supabase.from("messages").upsert(rows);
             if (error) throw error;
@@ -186,82 +190,135 @@ function App() {
   async function addFiles(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    if (!supabase || !session?.user) {
+      setNotice("Sign in to Yaza AI before attaching files so they can be saved securely to your account.");
+      setAuthMode("signin");
+      setAuthOpen(true);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     const supported = files.filter(file =>
       /^image\/(png|jpeg|jpg|webp|gif)$/i.test(file.type) ||
+      file.type === "application/pdf" || /\.pdf$/i.test(file.name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || /\.docx$/i.test(file.name) ||
       /\.(txt|md|csv|json|xml|html|css|js|jsx|ts|tsx|py|java|c|cpp|sql|log)$/i.test(file.name)
     );
-    if (supported.length !== files.length) setNotice("Supported files: images, TXT, MD, CSV, JSON, XML, HTML, CSS, JS/TS, Python, Java, C/C++, SQL and LOG.");
+    if (supported.length !== files.length) setNotice("Supported: images, PDF, DOCX and common text/code files.");
     const remaining = Math.max(0, 5 - attachments.length);
     const chosen = supported.slice(0, remaining);
     if (supported.length > remaining) setNotice("You can attach up to 5 files per message.");
     try {
       const loaded = await Promise.all(chosen.map(async file => {
-        if (file.size > 2.5 * 1024 * 1024) throw new Error(`${file.name} is larger than 2.5 MB. Please choose a smaller file.`);
+        if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB. Please choose a smaller file.`);
+        const id = crypto.randomUUID();
         if (file.type.startsWith("image/")) {
-          return { id: crypto.randomUUID(), name: file.name, type: file.type, kind: "image", data: await readFileAsDataUrl(file) };
+          return { id, name: file.name, type: file.type, kind: "image", data: await readFileAsDataUrl(file), file };
+        }
+        if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+          const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+          const pages = [];
+          for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+            const page = await pdf.getPage(pageNumber);
+            const content = await page.getTextContent();
+            pages.push(content.items.map(item => item.str || "").join(" "));
+          }
+          const extracted = pages.join("\\n\\n").slice(0, 100000);
+          if (!extracted.trim()) throw new Error(`${file.name} has no extractable text. Scanned PDFs need OCR, which is not available yet.`);
+          return { id, name: file.name, type: "application/pdf", kind: "text", text: extracted, file };
+        }
+        if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || /\.docx$/i.test(file.name)) {
+          const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+          const extracted = (result.value || "").slice(0, 100000);
+          if (!extracted.trim()) throw new Error(`${file.name} does not contain readable text.`);
+          return { id, name: file.name, type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", kind: "text", text: extracted, file };
         }
         if (file.size > 1024 * 1024) throw new Error(`${file.name} is larger than 1 MB. Please choose a smaller text file.`);
-        return { id: crypto.randomUUID(), name: file.name, type: file.type || "text/plain", kind: "text", text: await file.text() };
+        return { id, name: file.name, type: file.type || "text/plain", kind: "text", text: (await file.text()).slice(0, 100000), file };
       }));
       setAttachments(old => [...old, ...loaded].slice(0, 5));
       setNotice("");
     } catch (error) { setNotice(error.message || "Could not read the selected file."); }
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
+  async function openAttachment(file) {
+    if (!supabase || !file?.path) return;
+    const tab = window.open("about:blank", "_blank");
+    const { data, error } = await supabase.storage.from("chat-attachments").createSignedUrl(file.path, 60);
+    if (error || !data?.signedUrl) {
+      if (tab) tab.close();
+      setNotice(error?.message || "Could not open this saved attachment.");
+      return;
+    }
+    if (tab) tab.location.href = data.signedUrl;
+    else window.location.href = data.signedUrl;
+  }
+
   async function sendMessage(text = prompt) {
     const content = text.trim();
     if ((!content && !attachments.length) || sending) return;
     const pendingAttachments = attachments;
     const messageContent = content || "Please review the attached file(s).";
+    if (pendingAttachments.length && (!supabase || !session?.user)) {
+      setNotice("Sign in to save attachments permanently before sending them.");
+      setAuthMode("signin"); setAuthOpen(true); return;
+    }
     let chat = activeChat;
     if (!chat) { chat = makeChat(); setChats([chat]); setActiveId(chat.id); }
-    const userMessage = { id: crypto.randomUUID(), role: "user", content: messageContent, attachments: pendingAttachments.map(({ id, name, type, kind }) => ({ id, name, type, kind })) };
+    const userMessageId = crypto.randomUUID();
     const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, streaming: true };
-    const nextMessages = [...chat.messages, userMessage];
-    updateChat(chat.id, c => ({
-      ...c,
-      title: c.messages.length ? c.title : messageContent.slice(0, 42) + (messageContent.length > 42 ? "…" : ""),
-      messages: [...c.messages, userMessage, assistantMessage]
-    }));
     setPrompt("");
     setAttachments([]);
     setSending(true);
     setNotice("");
+    let userMessage;
     try {
+      const savedAttachments = await Promise.all(pendingAttachments.map(async file => {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "attachment";
+        const path = `${session.user.id}/${chat.id}/${userMessageId}/${file.id}-${safeName}`;
+        const { error } = await supabase.storage.from("chat-attachments").upload(path, file.file, {
+          contentType: file.type, upsert: false
+        });
+        if (error) throw new Error(`Could not save ${file.name}: ${error.message}`);
+        return { id: file.id, name: file.name, type: file.type, kind: file.kind, path };
+      }));
+      userMessage = { id: userMessageId, role: "user", content: messageContent, attachments: savedAttachments };
+      const nextMessages = [...chat.messages, userMessage];
+      updateChat(chat.id, c => ({
+        ...c,
+        title: c.messages.length ? c.title : messageContent.slice(0, 42) + (messageContent.length > 42 ? "…" : ""),
+        messages: [...c.messages, userMessage, assistantMessage]
+      }));
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, model, messages: nextMessages.map(({ role, content }) => ({ role, content })), attachments: pendingAttachments.map(({ name, type, kind, data, text }) => ({ name, type, kind, data, text })) })
+        body: JSON.stringify({
+          provider, model,
+          messages: nextMessages.map(({ role, content }) => ({ role, content })),
+          attachments: pendingAttachments.map(({ name, type, kind, data, text }) => ({ name, type, kind, data, text }))
+        })
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || "Something went wrong.");
       }
       if (!response.body) throw new Error("Streaming is not supported by this browser. Please refresh and try again.");
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-      let answer = "";
-      let streamError = "";
-      let completed = false;
-
+      let buffer = "", answer = "", streamError = "", completed = false;
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
+        const events = buffer.split("\\n\\n");
         buffer = events.pop() || "";
         for (const event of events) {
-          const line = event.split("\n").find(part => part.startsWith("data: "));
+          const line = event.split("\\n").find(part => part.startsWith("data: "));
           if (!line) continue;
           const payload = JSON.parse(line.slice(6));
           if (payload.delta) {
             answer += payload.delta;
-            updateChat(chat.id, c => ({
-              ...c,
-              messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer } : m)
-            }));
+            updateChat(chat.id, c => ({ ...c, messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer } : m) }));
           }
           if (payload.error) streamError = payload.error;
           if (payload.done) completed = true;
@@ -275,24 +332,22 @@ function App() {
         if (payload.done) completed = true;
       }
       if (answer) {
-        updateChat(chat.id, c => ({
-          ...c,
-          messages: c.messages.map(m => m.id === assistantMessage.id
-            ? { ...m, content: answer, provider, model, streaming: false }
-            : m)
-        }));
+        updateChat(chat.id, c => ({ ...c, messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer, provider, model, streaming: false } : m) }));
       } else {
         updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
       }
       if (streamError) setNotice(streamError);
       else if (!completed) setNotice("The response stream ended unexpectedly. Any text received has been kept.");
     } catch (error) {
-      updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
-      setNotice(error.message || "Unable to reach Yaza AI.");
+      if (userMessage) {
+        updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
+      }
+      setNotice(error.message || "Unable to send your message.");
       setPrompt(content);
       setAttachments(pendingAttachments);
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
+
   function deleteChat(id) {
     const remaining = chats.filter(c => c.id !== id);
     const next = remaining.length ? remaining : [makeChat()];
@@ -362,7 +417,7 @@ function App() {
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
-            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <span className="sent-attachment" key={file.id}>{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</span>)}</div>}{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
+            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
           </article>)}
           <div ref={endRef}/>
         </div>}
@@ -374,11 +429,11 @@ function App() {
           {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
           <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder="Message Yaza AI..." rows={1} disabled={sending}/>
           <div className="composer-bottom">
-            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Web search is coming in a future update.")}><Globe2 size={15}/> <span>Search</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
+            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Web search is coming in a future update.")}><Globe2 size={15}/> <span>Search</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
-        <p className="disclaimer">Images and text files supported · Yaza AI can make mistakes. Check important information.</p>
+        <p className="disclaimer">Images, PDF and Word files supported · Attachments are saved securely to your account · Yaza AI can make mistakes. Check important information.</p>
       </footer>
     </main>
 
