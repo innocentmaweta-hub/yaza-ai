@@ -676,3 +676,22 @@
 .theme-light .wallet-promo-copy small{color:#77717a}
 .theme-light .wallet-promo-meter{background:#eee2df}
 .theme-light .wallet-promo-methods{color:#98654f}
+
+
+/* Paid-usage choice and Last choice fallback */
+.usage-choice-backdrop{z-index:180}
+.usage-choice-dialog{position:relative;width:min(430px,calc(100vw - 32px));padding:28px;border:1px solid #493b38;border-radius:18px;background:#1c1d24;color:#f1f0f4;box-shadow:0 24px 80px #000a}
+.usage-choice-dialog .modal-close{position:absolute;right:14px;top:14px}
+.usage-choice-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#49312d;color:#f2a47e;margin-bottom:16px}
+.usage-choice-dialog h2{font-size:20px;margin:0 28px 9px 0}
+.usage-choice-dialog p{font-size:12px;line-height:1.6;color:#aaa9b3;margin:0 0 20px}
+.usage-choice-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.usage-choice-actions button{min-height:42px;border:1px solid #55413d;border-radius:10px;padding:9px 12px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.usage-choice-wallet{background:#d97861;border-color:#d97861!important;color:#fff}
+.usage-choice-fallback{background:#292a32;color:#eeeef2}
+.usage-choice-actions button:hover{filter:brightness(1.1)}
+.usage-choice-dialog>small{display:block;margin-top:14px;color:#858590;font-size:10px;line-height:1.5}
+.theme-light .usage-choice-dialog{background:#fff;color:#292a32;border-color:#ead6ce}
+.theme-light .usage-choice-dialog p{color:#77717a}
+.theme-light .usage-choice-fallback{background:#f3f0f1;color:#37343a;border-color:#ded7d8}
+@media(max-width:430px){.usage-choice-dialog{padding:23px 18px}.usage-choice-actions{grid-template-columns:1fr}}
