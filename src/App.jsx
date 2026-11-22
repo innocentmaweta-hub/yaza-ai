@@ -15,7 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 const PROVIDERS = {
   openai: { label: "OpenAI", models: [{ id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
   gemini: { label: "Gemini", models: [{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }] },
-  openrouter: { label: "OpenRouter", models: [{ id: "openrouter/free", label: "Free model (automatic)" }, { id: "~google/gemini-flash-latest", label: "Gemini Flash (latest)" }, { id: "google/gemini-3.7-flash", label: "Gemini 3.7 Flash" }, { id: "openai/gpt-4.1", label: "GPT-4.1" }, { id: "deepseek/deepseek-r1", label: "DeepSeek R1" }, { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" }] },
+  openrouter: { label: "OpenRouter", models: [{ id: "openrouter/free", label: "Free model (automatic)" }] },
   kimi: { label: "Kimi", models: [{ id: "moonshot-v1-8k", label: "Kimi 8K" }, { id: "moonshot-v1-32k", label: "Kimi 32K" }, { id: "moonshot-v1-128k", label: "Kimi 128K" }] },
   yaza: { label: "Yaza AI", models: [{ id: "wachabe", label: "Wachabe" }] }
 };
