@@ -62,7 +62,7 @@ async function* streamClaudeResponse({ apiKey, model, messages, systemInstructio
   const decoder = new TextDecoder();
   let buffer = "";
   const parseEvent = function* (block) {
-    const data = block.split(/\\r?\\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\\n");
+    const data = block.split(/\r?\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\n");
     if (!data || data === "[DONE]") return;
     let payload;
     try { payload = JSON.parse(data); } catch { return; }
@@ -84,7 +84,7 @@ async function* streamClaudeResponse({ apiKey, model, messages, systemInstructio
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const blocks = buffer.split(/\\r?\\n\\r?\\n/);
+      const blocks = buffer.split(/\r?\n\r?\n/);
       buffer = blocks.pop() || "";
       for (const block of blocks) yield* parseEvent(block);
     }
@@ -379,7 +379,7 @@ export default async function handler(req, res) {
           if (file.kind === "image") {
             const match = file.data.match(/^data:([^;]+);base64,(.+)$/);
             if (match) content.push({ type: "image", source: { type: "base64", media_type: match[1] === "image/jpg" ? "image/jpeg" : match[1], data: match[2] } });
-          } else if (file.kind === "text") content.push({ type: "text", text: `\\n\\n--- Attached file: ${file.name} ---\\n${file.text}\\n--- End of ${file.name} ---` });
+          } else if (file.kind === "text") content.push({ type: "text", text: `\n\n--- Attached file: ${file.name} ---\n${file.text}\n--- End of ${file.name} ---` });
         }
         return { role: "user", content };
       });
