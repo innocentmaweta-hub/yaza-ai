@@ -1280,7 +1280,7 @@ function App() {
               <div className="wallet-history-heading"><strong>Recent wallet activity</strong><button onClick={loadWallet} disabled={walletLoading}>Refresh</button></div>
               <div className="wallet-history-list">
                 {(walletData?.transactions || []).map(item => <div className="wallet-history-item" key={item.id}>
-                  <div><strong>{item.description || item.kind.replace(/_/g," ")}</strong><span>{new Date(item.created_at).toLocaleString()}</span></div>
+                  <div><strong>{item.description || item.kind.replace(/_/g," ")}{item.metadata?.model_key ? " · " + item.metadata.model_key : ""}</strong><span>{new Date(item.created_at).toLocaleString()}</span></div>
                   <strong className={Number(item.amount_minor)>=0?"wallet-credit":"wallet-debit"}>{Number(item.amount_minor)>=0?"+":"−"}MK {(Math.abs(Number(item.amount_minor))/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>
                 </div>)}
                 {!walletLoading && !(walletData?.transactions || []).length && <div className="settings-info-note">No wallet transactions yet. Your first confirmed top-up will appear here.</div>}
@@ -1303,7 +1303,7 @@ function App() {
                 <div className="usage-stat"><span>Requests without cost data</span><strong>{usageData.unpricedRequests}</strong></div>
               </div>
               <div className="settings-info-note">Token counts are approximate estimates based on text length. Provider-reported cost is shown only when the provider includes it (currently most consistently available through OpenRouter); it is not a complete invoice or billing statement.</div>
-              <div className="usage-model-list">{usageData.byModel.map((item,index)=><div key={index}><span>{item.provider} · {item.model}</span><strong>{item.requests} requests</strong></div>)}{!usageData.byModel.length && <div className="settings-info-note">No requests recorded this month yet.</div>}</div>
+              <div className="usage-model-list">{usageData.byModel.map((item,index)=><div key={index}><span>{item.publicModelKey || (item.provider + " · " + item.model)}</span><strong>{item.requests} · MK {(Number(item.billedAmountMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>)}{!usageData.byModel.length && <div className="settings-info-note">No requests recorded this month yet.</div>}</div>
               <button className="settings-action-card" onClick={loadUsageReport}><div><strong>Refresh usage</strong><span>Update this report from Yaza's server records.</span></div><span className="settings-chip">Refresh</span></button>
             </>}
           </section>}
