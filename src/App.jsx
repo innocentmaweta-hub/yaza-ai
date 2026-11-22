@@ -4,9 +4,9 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
 import {
-  Archive, ArchiveRestore, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, LogIn, LogOut, Mic, MicOff,
-  FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal, Pencil,
-  PanelLeftClose, Plus, Search, Settings2, Sparkles, SquarePen, Trash2, UserRoundPlus,
+  Archive, ArchiveRestore, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, Copy, LogIn, LogOut, Mic, MicOff,
+  FileText, Globe2, ImagePlus, Link2, Menu, MessageSquare, MoreHorizontal, Pencil,
+  PanelLeftClose, Plus, Search, Settings2, Share2, Sparkles, SquarePen, Trash2, UserRoundPlus,
   X, Zap
 } from "lucide-react";
 
@@ -69,6 +69,12 @@ function App() {
   const recognitionRef = useRef(null);
   const voiceBasePromptRef = useRef("");
   const [notice, setNotice] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [sharedView, setSharedView] = useState(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState("");
   const [session, setSession] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -322,6 +328,21 @@ function App() {
     setCloudStatus("Signed out");
   }
 
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("share");
+    if (!token) return;
+    let alive = true;
+    setShareLoading(true);
+    fetch(`/api/share?token=${encodeURIComponent(token)}`)
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "This shared conversation is unavailable.");
+        if (alive) setSharedView(data);
+      })
+      .catch(error => { if (alive) setShareError(error.message || "Could not load this shared conversation."); })
+      .finally(() => { if (alive) setShareLoading(false); });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, sending]);
   useEffect(() => {
     const onKey = e => {
@@ -584,6 +605,50 @@ function App() {
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
 
+  async function createShareLink() {
+    if (!session?.access_token || !activeChat || !activeChat.messages?.length) {
+      setNotice("Sign in and open a conversation with messages before sharing.");
+      return;
+    }
+    setShareBusy(true); setShareError(""); setShareUrl("");
+    try {
+      const response = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ conversationId: activeChat.id })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not create a share link.");
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      url.searchParams.set("share", data.token);
+      setShareUrl(url.toString());
+    } catch (error) { setShareError(error.message || "Could not create a share link."); }
+    finally { setShareBusy(false); }
+  }
+  async function revokeShareLinks() {
+    if (!session?.access_token || !activeChat) return;
+    if (!window.confirm("Revoke all public links for this conversation? Anyone using an old link will lose access.")) return;
+    setShareBusy(true); setShareError("");
+    try {
+      const response = await fetch("/api/share", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ conversationId: activeChat.id })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not revoke share links.");
+      setShareUrl("");
+      setShareError("All existing public links for this conversation have been revoked.");
+    } catch (error) { setShareError(error.message || "Could not revoke share links."); }
+    finally { setShareBusy(false); }
+  }
+  async function copyShareLink() {
+    if (!shareUrl) return;
+    try { await navigator.clipboard.writeText(shareUrl); setShareError("Link copied. Anyone with the link can view this conversation."); }
+    catch { setShareError("Copy was blocked by your browser. Select and copy the link above."); }
+  }
   function renameChat(id) {
     const chat = chats.find(item => item.id === id);
     if (!chat) return;
@@ -776,6 +841,9 @@ function App() {
     { icon: Globe2, title: "Understand a topic", text: "Explain a complex topic in simple, practical terms." }
   ];
 
+  if (shareLoading) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><p>Loading shared conversation…</p></div></div>;
+  if (shareError && !sharedView && new URLSearchParams(window.location.search).has("share")) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><h1>Shared conversation unavailable</h1><p>{shareError}</p><a href="/">Open Yaza AI</a></div></div>;
+  if (sharedView) return <div className="shared-page"><header className="shared-topbar"><a href="/" className="shared-brand"><span className="brand-mark"><Sparkles size={17}/></span> yaza<span>ai</span></a><span><Link2 size={14}/> Shared conversation · Read only</span></header><main className="shared-content"><div className="shared-heading"><div className="eyebrow"><span></span> SHARED WITH YOU</div><h1>{sharedView.title || "Conversation"}</h1><p>Read-only copy · Attachments are not included</p></div>{(sharedView.messages || []).map((message,index) => <article className={`shared-message ${message.role}`} key={message.id || index}><div className="shared-message-author">{message.role === "assistant" ? <><Sparkles size={14}/> Yaza AI</> : "You"}</div><div className="shared-message-content">{message.content}</div></article>)}<footer>Shared using <a href="/">Yaza AI</a></footer></main></div>;
   return <div className={`app-shell theme-${theme}`}>
     <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
       <div className="side-top">
@@ -843,9 +911,10 @@ function App() {
             </div>
           </div>
         </div>
-        <div className="top-actions"><span className="private-label"><span></span> {session ? "Cloud synced" : cloudStatus || "Private session"}</span><button className="upgrade-btn" onClick={() => setNotice("Account plans will be available when Yaza accounts are enabled.")}> <Sparkles size={14}/> Explore Yaza</button></div>
+        <div className="top-actions">{messages.length > 0 && <button className="share-conversation-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setShareError(""); setShareUrl(""); setShareOpen(true); }} disabled={sending}><Share2 size={14}/> Share</button>}<span className="private-label"><span></span> {session ? "Cloud synced" : cloudStatus || "Private session"}</span><button className="upgrade-btn" onClick={() => setNotice("Account plans will be available when Yaza accounts are enabled.")}> <Sparkles size={14}/> Explore Yaza</button></div>
       </header>
 
+      {shareOpen && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setShareOpen(false); }}><section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title"><button className="modal-close" onClick={() => setShareOpen(false)} aria-label="Close"><X size={17}/></button><div className="share-dialog-icon"><Share2 size={19}/></div><h2 id="share-dialog-title">Share conversation</h2><p>Create a public, read-only link to this conversation. Anyone with the link can view its text, so only share content you are comfortable making public.</p><div className="share-privacy-note"><Check size={14}/> You can revoke the link at any time. Attachments are not included.</div>{shareUrl && <div className="share-url-row"><input readOnly value={shareUrl} aria-label="Public share link"/><button onClick={copyShareLink} title="Copy link"><Copy size={15}/></button></div>}{shareError && <p className="share-feedback">{shareError}</p>}<div className="share-dialog-actions"><button className="share-revoke-btn" onClick={revokeShareLinks} disabled={shareBusy}>Revoke links</button><button className="share-create-btn" onClick={createShareLink} disabled={shareBusy}>{shareBusy ? "Please wait…" : shareUrl ? "Create another link" : "Create public link"}</button></div></section></div>}
       <section className={`conversation ${isNew ? "welcome" : ""}`}>
         {isNew ? <div className="welcome-content">
           <div className="welcome-emblem"><span><Sparkles size={25}/></span><i></i><b></b></div>
