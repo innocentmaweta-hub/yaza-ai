@@ -21,6 +21,8 @@ const PROVIDERS = {
 const STORAGE = "yaza-ai-conversations-v1";
 const makeChat = () => ({ id: crypto.randomUUID(), title: "New chat", messages: [], updatedAt: Date.now() });
 const PROVIDER_SETTINGS = "yaza-ai-provider-settings-v1";
+const USER_PREFERENCES = "yaza-ai-user-preferences-v1";
+const DEFAULT_PREFERENCES = { theme: "dark", voiceInputEnabled: true, readAloudEnabled: true };
 function readProviderSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROVIDER_SETTINGS) || "{}");
@@ -43,6 +45,11 @@ function App() {
   const [providerSettings] = useState(readProviderSettings);
   const [provider, setProvider] = useState(providerSettings.provider);
   const [model, setModel] = useState(providerSettings.model);
+  const [theme, setTheme] = useState(() => { try { return JSON.parse(localStorage.getItem(USER_PREFERENCES) || "{}").theme === "light" ? "light" : "dark"; } catch { return "dark"; } });
+  const [voiceInputEnabled, setVoiceInputEnabled] = useState(true);
+  const [readAloudEnabled, setReadAloudEnabled] = useState(true);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [preferencesStatus, setPreferencesStatus] = useState("This browser");
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -88,7 +95,9 @@ function App() {
   useEffect(() => () => { try { recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); } catch {} }, []);
   useEffect(() => {
     localStorage.setItem(PROVIDER_SETTINGS, JSON.stringify({ provider, model }));
-  }, [provider, model]);
+    localStorage.setItem(USER_PREFERENCES, JSON.stringify({ theme, voiceInputEnabled, readAloudEnabled }));
+    document.documentElement.dataset.theme = theme;
+  }, [provider, model, theme, voiceInputEnabled, readAloudEnabled]);
 
   useEffect(() => {
     if (!supabase) { setCloudStatus("Local mode"); setCloudReady(true); return; }
@@ -97,6 +106,7 @@ function App() {
       if (!alive) return;
       setSession(data.session || null);
       if (data.session?.user) {
+        await loadCloudPreferences(data.session.user.id);
         await loadCloudChats(data.session.user.id);
         await loadCloudMemories();
         await checkAdminAccess(data.session);
@@ -104,11 +114,59 @@ function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession || null);
-      if (!nextSession) { setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); }
-      else { setCloudReady(false); setTimeout(async () => { await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); }, 0); }
+      if (!nextSession) { setPreferencesReady(false); setPreferencesStatus("This browser"); setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); }
+      else { setPreferencesReady(false); setCloudReady(false); setTimeout(async () => { await loadCloudPreferences(nextSession.user.id); await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); }, 0); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
+
+  async function loadCloudPreferences(userId) {
+    if (!supabase || !userId) return;
+    try {
+      const { data, error } = await supabase.from("user_preferences")
+        .select("preferences").eq("user_id", userId).maybeSingle();
+      if (error) throw error;
+      if (data?.preferences) {
+        const saved = data.preferences;
+        const nextProvider = PROVIDERS[saved.provider] ? saved.provider : provider;
+        const nextModel = PROVIDERS[nextProvider].models.some(item => item.id === saved.model)
+          ? saved.model : PROVIDERS[nextProvider].models[0].id;
+        setProvider(nextProvider);
+        setModel(nextModel);
+        setTheme(saved.theme === "light" ? "light" : "dark");
+        setVoiceInputEnabled(saved.voiceInputEnabled !== false);
+        setReadAloudEnabled(saved.readAloudEnabled !== false);
+      } else {
+        const local = { provider, model, theme, voiceInputEnabled, readAloudEnabled };
+        const { error: saveError } = await supabase.from("user_preferences")
+          .upsert({ user_id: userId, preferences: local, updated_at: new Date().toISOString() });
+        if (saveError) throw saveError;
+      }
+      setPreferencesStatus("Synced to your account");
+    } catch (error) {
+      console.error("Yaza preferences load:", error);
+      setPreferencesStatus("Sync issue — using this browser");
+      setNotice("Could not sync your settings. Your browser preferences are still available.");
+    } finally { setPreferencesReady(true); }
+  }
+
+  useEffect(() => {
+    if (!supabase || !session?.user || !preferencesReady) return;
+    const timer = setTimeout(async () => {
+      try {
+        const preferences = { provider, model, theme, voiceInputEnabled, readAloudEnabled };
+        const { error } = await supabase.from("user_preferences").upsert({
+          user_id: session.user.id, preferences, updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        setPreferencesStatus("Synced to your account");
+      } catch (error) {
+        console.error("Yaza preferences save:", error);
+        setPreferencesStatus("Sync issue — using this browser");
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [provider, model, theme, voiceInputEnabled, readAloudEnabled, session, preferencesReady]);
 
   async function loadCloudChats(userId) {
     if (!supabase) return;
@@ -523,6 +581,7 @@ function App() {
     if (activeId === id) setActiveId(next[0].id);
   }
   function toggleVoiceInput() {
+    if (!voiceInputEnabled) { setNotice("Voice input is disabled in Settings."); return; }
     if (voiceListening) {
       try { recognitionRef.current?.stop(); } catch {}
       setVoiceListening(false);
@@ -571,6 +630,7 @@ function App() {
   }
 
   function toggleSpeak(message) {
+    if (!readAloudEnabled) { setNotice("Read aloud is disabled in Settings."); return; }
     if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
       setNotice("Voice output is not supported in this browser. Try the latest Google Chrome or Microsoft Edge.");
       return;
@@ -641,6 +701,14 @@ function App() {
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
   function handleSubmit(e) { e.preventDefault(); if (imageMode) generateImage(); else sendMessage(); }
+  function exportChatData() {
+    const payload = { exportedAt: new Date().toISOString(), product: "Yaza AI", conversations: chats.map(chat => ({ id: chat.id, title: chat.title, updatedAt: new Date(chat.updatedAt || Date.now()).toISOString(), messages: (chat.messages || []).map(message => ({ id: message.id, role: message.role, content: message.content, provider: message.provider || null, model: message.model || null, attachments: (message.attachments || []).map(({ id, name, type, kind, path }) => ({ id, name, type, kind, path })) })) })) };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = "yaza-ai-data-export.json"; link.click();
+    URL.revokeObjectURL(url);
+    setNotice("Your conversation export has been prepared as a JSON file.");
+  }
   function handlePromptKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
@@ -651,7 +719,7 @@ function App() {
     { icon: Globe2, title: "Understand a topic", text: "Explain a complex topic in simple, practical terms." }
   ];
 
-  return <div className="app-shell">
+  return <div className={`app-shell theme-${theme}`}>
     <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
       <div className="side-top">
         <button className="brand" onClick={newChat} aria-label="Yaza AI home"><span className="brand-mark"><Sparkles size={19}/></span><span>yaza<span className="brand-ai">ai</span></span></button>
@@ -811,31 +879,32 @@ function App() {
           <div className="settings-mobile-heading"><strong>Settings</strong><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
           {settingsTab==="general" && <section className="settings-panel-section"><h2>General</h2><p className="settings-panel-intro">Choose how Yaza AI appears and communicates.</p>
             <div className="settings-option"><div><strong>Language</strong><span>The language used across the Yaza interface.</span></div><span className="settings-chip">English</span></div>
-            <div className="settings-option"><div><strong>Appearance</strong><span>Yaza currently uses its dark interface theme.</span></div><span className="settings-chip">Dark</span></div>
+            <div className="settings-option"><div><strong>Appearance</strong><span>Choose the interface theme for this device and your signed-in account.</span></div><select className="settings-inline-select" value={theme} onChange={event => setTheme(event.target.value)}><option value="dark">Dark</option><option value="light">Light</option></select></div>
           </section>}
           {settingsTab==="ai" && <section className="settings-panel-section"><h2>AI preferences</h2><p className="settings-panel-intro">Choose the provider and model Yaza starts with when you chat.</p>
             <label className="settings-field"><span>Default AI provider</span><select value={provider} onChange={event => chooseProvider(event.target.value)}>{Object.entries(PROVIDERS).map(([id,item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
             <label className="settings-field"><span>Default model</span><select value={model} onChange={event => setModel(event.target.value)}>{(PROVIDERS[provider]?.models || []).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-            <div className="settings-info-note">Your provider and model selection is saved in this browser. Provider availability depends on the API keys and credits configured by Yaza.</div>
+            <div className="settings-info-note">Your provider and model are saved to your Yaza account and sync across devices when signed in. Guests keep these choices in this browser. Provider availability depends on the API keys and credits configured by Yaza.</div>
           </section>}
           {settingsTab==="personalization" && <section className="settings-panel-section"><h2>Personalization</h2><p className="settings-panel-intro">Manage information that helps Yaza tailor future conversations.</p>
             <button className="settings-action-card" onClick={() => { setSettingsOpen(false); if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); } else setMemoryOpen(true); }}><div><strong>Saved memories</strong><span>Review, add, edit or delete memories used in future chats.</span></div><span className="settings-chip">{memories.length} saved</span></button>
           </section>}
           {settingsTab==="voice" && <section className="settings-panel-section"><h2>Voice</h2><p className="settings-panel-intro">Use your browser's built-in speech features with Yaza.</p>
-            <div className="settings-option"><div><strong>Voice input</strong><span>Speak your prompt using the microphone control in the composer. Browser microphone permission is required.</span></div><span className="settings-chip">Composer control</span></div>
-            <div className="settings-option"><div><strong>Read aloud</strong><span>Play an assistant response using the Read aloud control beneath a reply.</span></div><span className="settings-chip">Per response</span></div>
+            <div className="settings-option"><div><strong>Voice input</strong><span>Allow speech-to-text from the microphone control. Browser microphone permission is still required.</span></div><label className="settings-toggle"><input type="checkbox" checked={voiceInputEnabled} onChange={event => setVoiceInputEnabled(event.target.checked)}/><span>{voiceInputEnabled ? "On" : "Off"}</span></label></div>
+            <div className="settings-option"><div><strong>Read aloud</strong><span>Allow assistant replies to be spoken using your browser voice.</span></div><label className="settings-toggle"><input type="checkbox" checked={readAloudEnabled} onChange={event => setReadAloudEnabled(event.target.checked)}/><span>{readAloudEnabled ? "On" : "Off"}</span></label></div>
             <div className="settings-info-note">Voice availability and voices depend on your browser and device. Chrome generally provides the best support.</div>
           </section>}
           {settingsTab==="data" && <section className="settings-panel-section"><h2>Data controls</h2><p className="settings-panel-intro">Understand where your conversations and attachments are kept.</p>
             <div className="settings-option"><div><strong>Conversation history</strong><span>Signed-in conversations are synced with your Yaza account. Local history may also be available in this browser.</span></div><span className="settings-chip">{session ? "Account sync" : "This browser"}</span></div>
             <div className="settings-option"><div><strong>File attachments</strong><span>Uploaded files are stored in private account storage and opened using temporary links.</span></div><span className="settings-chip">Private</span></div>
-            <div className="settings-info-note">Chat deletion and account-wide data export controls are not available here yet. We will add clear confirmation and privacy safeguards before enabling permanent deletion.</div>
+            <button className="settings-action-card" onClick={exportChatData}><div><strong>Export conversations</strong><span>Download your chats and attachment details as a JSON file.</span></div><span className="settings-chip">Export JSON</span></button>
+            <div className="settings-info-note">The export includes conversation text and attachment metadata, not the original uploaded files or account credentials. Account deletion will be added with a separate confirmation and secure server-side cleanup.</div>
           </section>}
           {settingsTab==="account" && <section className="settings-panel-section"><h2>Account</h2><p className="settings-panel-intro">Manage your Yaza AI sign-in.</p>
             <div className="settings-option"><div><strong>Email address</strong><span>{session?.user?.email || "You are using Yaza as a guest."}</span></div><span className="settings-chip">{session ? "Signed in" : "Guest"}</span></div>
             {session ? <button className="settings-danger-action" onClick={() => { setSettingsOpen(false); signOut(); }}><LogOut size={16}/> Sign out</button> : <button className="settings-primary-action" onClick={() => { setSettingsOpen(false); setAuthMode("signin"); setAuthOpen(true); }}><LogIn size={16}/> Sign in or create an account</button>}
           </section>}
-          <div className="settings-content-footer"><span>Changes to AI provider and model apply immediately.</span><button onClick={() => setSettingsOpen(false)}>Done</button></div>
+          <div className="settings-content-footer"><span>{session ? preferencesStatus : "Saved on this browser"}</span><button onClick={() => setSettingsOpen(false)}>Done</button></div>
         </main>
       </section>
     </div>}
