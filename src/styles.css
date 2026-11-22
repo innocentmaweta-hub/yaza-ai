@@ -422,3 +422,46 @@
 .theme-light .admin-model-config-copy strong{color:#292a32}
 .theme-light .admin-model-config select{background:#fff;border-color:#d9dae1;color:#33343c}
 @media(max-width:600px){.admin-model-config{padding:13px}.admin-model-config-footer{align-items:stretch;flex-direction:column}.admin-model-config-footer .settings-primary-action{width:100%;justify-content:center}}
+
+
+/* Prepaid wallet and PayChangu billing */
+.wallet-balance-card{display:grid;gap:7px;padding:20px;margin:16px 0;border:1px solid #55423e;border-radius:13px;background:linear-gradient(135deg,#2a2426,#24242b)}
+.wallet-balance-card span,.wallet-balance-card small{color:#aaa3a8;font-size:11px}
+.wallet-balance-card strong{font-size:29px;letter-spacing:-.7px;color:#f2c3a7}
+.wallet-topup-card{display:grid;gap:12px;padding:15px;margin:14px 0;border:1px solid var(--yaza-border,#373841);border-radius:11px;background:var(--yaza-surface,#202127)}
+.wallet-topup-card>strong{font-size:14px}
+.wallet-topup-card>span{font-size:11px;line-height:1.5;color:var(--yaza-muted,#92939e)}
+.wallet-topup-card label{display:grid;gap:6px;font-size:11px;color:var(--yaza-muted,#92939e)}
+.wallet-topup-card input{height:40px;padding:0 11px;border:1px solid var(--yaza-border,#373841);border-radius:8px;background:var(--yaza-bg,#17181d);color:var(--yaza-text,#ececf0);font:inherit}
+.wallet-topup-card .settings-primary-action{margin:0;justify-content:center}
+.wallet-history-heading{display:flex;align-items:center;justify-content:space-between;margin:20px 0 9px}
+.wallet-history-heading strong{font-size:13px}
+.wallet-history-heading button{border:1px solid var(--yaza-border,#373841);border-radius:7px;padding:6px 10px;background:transparent;color:var(--yaza-muted,#92939e);font-size:11px;cursor:pointer}
+.wallet-history-list{border:1px solid var(--yaza-border,#373841);border-radius:10px;overflow:hidden}
+.wallet-history-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid var(--yaza-border,#373841)}
+.wallet-history-item:last-child{border-bottom:0}
+.wallet-history-item>div{display:grid;gap:4px;min-width:0}
+.wallet-history-item>div strong{font-size:11px;overflow-wrap:anywhere}
+.wallet-history-item>div span{font-size:10px;color:var(--yaza-muted,#92939e)}
+.wallet-history-item>strong{font-size:12px;white-space:nowrap}
+.wallet-credit{color:#78c69b}.wallet-debit{color:#e49b83}
+.admin-pricing-list{display:grid;gap:11px;margin:12px 0 22px}
+.admin-pricing-card{grid-template-columns:1fr 1fr}
+.admin-pricing-card .admin-model-config-copy,.admin-pricing-card .admin-model-config-footer{grid-column:1/-1}
+.admin-pricing-card label{display:grid;gap:6px;min-width:0}
+.admin-pricing-card label>span{font-size:10px;color:#92939e}
+.admin-pricing-card input:not([type="checkbox"]){width:100%;height:36px;box-sizing:border-box;padding:0 9px;border:1px solid #3b3c46;border-radius:8px;background:#25262d;color:#e8e7ed;font-size:12px}
+.admin-pricing-card .admin-pricing-enabled{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.admin-pricing-card .admin-pricing-enabled input{accent-color:#c98769;width:16px;height:16px}
+.admin-pricing-card select{height:36px}
+.theme-light .wallet-balance-card{background:linear-gradient(135deg,#f8eee9,#f3f0f4);border-color:#e7d5cc}
+.theme-light .wallet-balance-card span,.theme-light .wallet-balance-card small{color:#766d70}
+.theme-light .wallet-balance-card strong{color:#8d523d}
+.theme-light .wallet-topup-card{background:#fff;border-color:#e2e3e8}
+.theme-light .wallet-topup-card input{background:#fff;border-color:#d9dae1;color:#33343c}
+.theme-light .wallet-history-list{border-color:#e2e3e8}
+.theme-light .wallet-history-item{border-color:#e2e3e8}
+.theme-light .wallet-history-item>div span{color:#70737e}
+.theme-light .wallet-history-heading button{border-color:#dedfe5;color:#626572}
+.theme-light .admin-pricing-card input:not([type="checkbox"]){background:#fff;border-color:#d9dae1;color:#33343c}
+@media(max-width:560px){.admin-pricing-card{grid-template-columns:1fr}.wallet-history-item{align-items:flex-start;flex-direction:column}.wallet-history-item>strong{align-self:flex-end}}
