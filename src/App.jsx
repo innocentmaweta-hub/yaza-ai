@@ -66,6 +66,11 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [cloudReady, setCloudReady] = useState(false);
   const [cloudStatus, setCloudStatus] = useState("");
+  const [memories, setMemories] = useState([]);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [editingMemoryId, setEditingMemoryId] = useState(null);
+  const [memoryBusy, setMemoryBusy] = useState(false);
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const activeChat = chats.find(c => c.id === activeId) || chats[0];
@@ -84,13 +89,15 @@ function App() {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!alive) return;
       setSession(data.session || null);
-      if (data.session?.user) await loadCloudChats(data.session.user.id);
-      else setCloudReady(true);
+      if (data.session?.user) {
+        await loadCloudChats(data.session.user.id);
+        await loadCloudMemories();
+      } else setCloudReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession || null);
-      if (!nextSession) { setCloudReady(true); setCloudStatus("Signed out"); }
-      else { setCloudReady(false); setTimeout(() => loadCloudChats(nextSession.user.id), 0); }
+      if (!nextSession) { setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); }
+      else { setCloudReady(false); setTimeout(async () => { await loadCloudChats(nextSession.user.id); await loadCloudMemories(); }, 0); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
@@ -148,6 +155,54 @@ function App() {
     const timer = setTimeout(persist, 700);
     return () => clearTimeout(timer);
   }, [chats, session, cloudReady]);
+
+  async function loadCloudMemories() {
+    if (!supabase) return;
+    const { data, error } = await supabase.from("user_memories")
+      .select("id,content,created_at,updated_at")
+      .order("updated_at", { ascending: false });
+    if (error) {
+      console.error("Yaza memory load:", error);
+      setNotice("Could not load your saved memories. Check the Yaza memory table in Supabase.");
+      return;
+    }
+    setMemories(data || []);
+  }
+
+  async function saveMemory(event) {
+    event?.preventDefault();
+    const content = memoryDraft.trim();
+    if (!content || !session?.user || memoryBusy) return;
+    if (content.length > 500) { setNotice("Each memory must be 500 characters or fewer."); return; }
+    setMemoryBusy(true);
+    try {
+      const query = supabase.from("user_memories");
+      const result = editingMemoryId
+        ? await query.update({ content, updated_at: new Date().toISOString() }).eq("id", editingMemoryId).select("id,content,created_at,updated_at").single()
+        : await query.insert({ user_id: session.user.id, content }).select("id,content,created_at,updated_at").single();
+      if (result.error) throw result.error;
+      setMemories(old => editingMemoryId
+        ? old.map(item => item.id === editingMemoryId ? result.data : item).sort((a,b) => new Date(b.updated_at)-new Date(a.updated_at))
+        : [result.data, ...old]);
+      setMemoryDraft("");
+      setEditingMemoryId(null);
+      setNotice("Memory saved to your Yaza account.");
+    } catch (error) {
+      setNotice(error.message || "Could not save this memory.");
+    } finally { setMemoryBusy(false); }
+  }
+
+  async function removeMemory(id) {
+    if (!supabase || memoryBusy) return;
+    setMemoryBusy(true);
+    try {
+      const { error } = await supabase.from("user_memories").delete().eq("id", id);
+      if (error) throw error;
+      setMemories(old => old.filter(item => item.id !== id));
+      if (editingMemoryId === id) { setEditingMemoryId(null); setMemoryDraft(""); }
+    } catch (error) { setNotice(error.message || "Could not delete this memory."); }
+    finally { setMemoryBusy(false); }
+  }
 
   async function submitAuth(event) {
     event.preventDefault();
@@ -340,6 +395,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider, model,
+          memories: memories.map(item => item.content),
           messages: nextMessages.map((message, index) => ({ role: message.role, content: index === nextMessages.length - 1 ? message.content + webContext : message.content })),
           attachments: pendingAttachments.map(({ name, type, kind, data, text }) => ({ name, type, kind, data, text }))
         })
@@ -534,6 +590,7 @@ function App() {
         <button className="icon-btn side-collapse" onClick={() => setSidebarOpen(false)} title="Close sidebar"><PanelLeftClose size={18}/></button>
       </div>
       <button className="new-chat-btn" onClick={newChat}><SquarePen size={17}/> <span>New chat</span><span className="shortcut">⌘ K</span></button>
+      <button className="memory-nav-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setMemoryOpen(true); }}><Sparkles size={16}/> <span>Memory</span><span className="memory-count">{memories.length}</span></button>
       <div className="side-search"><Search size={15}/><input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search chats"/><span>⌘K</span></div>
       <div className="history-label">YOUR CHATS</div>
       <div className="chat-list">
@@ -598,6 +655,29 @@ function App() {
         <p className="disclaimer">Images, PDF and Word files supported · Attachments are saved securely to your account · Yaza AI can make mistakes. Check important information.</p>
       </footer>
     </main>
+
+    {memoryOpen && <div className="auth-backdrop" onClick={() => { setMemoryOpen(false); setEditingMemoryId(null); setMemoryDraft(""); }}>
+      <section className="memory-dialog" onClick={event => event.stopPropagation()}>
+        <button className="auth-close" onClick={() => { setMemoryOpen(false); setEditingMemoryId(null); setMemoryDraft(""); }} aria-label="Close"><X size={18}/></button>
+        <div className="auth-mark"><Sparkles size={21}/></div>
+        <h2>Yaza memory</h2>
+        <p>Save useful details you want Yaza to remember across chats. You control what is stored and can edit or delete it anytime.</p>
+        <form className="memory-form" onSubmit={saveMemory}>
+          <label>{editingMemoryId ? "Edit memory" : "Add a memory"}</label>
+          <textarea value={memoryDraft} onChange={event => setMemoryDraft(event.target.value)} maxLength={500} rows={3} placeholder="For example: I prefer concise answers and work mainly with Supabase." />
+          <div className="memory-form-footer"><span>{memoryDraft.length}/500</span><button className="auth-submit" type="submit" disabled={memoryBusy || !memoryDraft.trim()}>{memoryBusy ? "Saving…" : editingMemoryId ? "Update memory" : "Save memory"}</button></div>
+        </form>
+        <div className="memory-list-title">SAVED MEMORIES ({memories.length})</div>
+        <div className="memory-list">
+          {memories.map(item => <div className="memory-item" key={item.id}>
+            <p>{item.content}</p>
+            <div><button type="button" onClick={() => { setEditingMemoryId(item.id); setMemoryDraft(item.content); }}>Edit</button><button type="button" onClick={() => removeMemory(item.id)} disabled={memoryBusy}>Delete</button></div>
+          </div>)}
+          {!memories.length && <div className="memory-empty">No saved memories yet. Add one above to get started.</div>}
+        </div>
+        <div className="memory-footnote">Memories are private to your account and are added as context to future AI chats. Avoid saving passwords or highly sensitive information.</div>
+      </section>
+    </div>}
 
     {authOpen && <div className="auth-backdrop" onClick={() => setAuthOpen(false)}>
       <section className="auth-dialog" onClick={event => event.stopPropagation()}>
