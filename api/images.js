@@ -3,6 +3,27 @@ export const config = { maxDuration: 60 };
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ error: "Method not allowed." }); }
+  const authorization = req.headers.authorization || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!token || !supabaseUrl || !supabaseAnonKey) {
+    return res.status(401).json({ error: "Sign in to create images. Your session could not be verified." });
+  }
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { data, error } = await authClient.auth.getUser(token);
+    if (error || !data?.user) {
+      return res.status(401).json({ error: "Your session is invalid or expired. Sign in again." });
+    }
+  } catch (error) {
+    console.error("Yaza image authentication error:", error?.message || error);
+    return res.status(503).json({ error: "Image generation authentication is temporarily unavailable." });
+  }
+
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "Image generation is not configured. Add OPENROUTER_API_KEY in Vercel and redeploy." });
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim().slice(0, 4000) : "";
