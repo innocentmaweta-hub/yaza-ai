@@ -13,6 +13,7 @@ create table if not exists public.messages (
   content text not null,
   provider text,
   model text,
+  attachments jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
 create index if not exists conversations_user_updated_idx on public.conversations(user_id, updated_at desc);
@@ -31,3 +32,30 @@ create policy "Users manage messages in their conversations" on public.messages
   );
 grant select, insert, update, delete on public.conversations to authenticated;
 grant select, insert, update, delete on public.messages to authenticated;
+
+-- Private permanent storage for each signed-in user's chat attachments.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'chat-attachments', 'chat-attachments', false, 10485760,
+  array['image/png','image/jpeg','image/webp','image/gif','application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain','text/markdown','text/csv','application/json','application/xml',
+    'text/html','text/css','text/javascript','application/javascript',
+    'text/x-python','text/x-java-source','text/x-sql']
+)
+on conflict (id) do update set public=false, file_size_limit=10485760, allowed_mime_types=excluded.allowed_mime_types;
+drop policy if exists "Yaza users upload own chat attachments" on storage.objects;
+create policy "Yaza users upload own chat attachments" on storage.objects
+for insert to authenticated with check (
+  bucket_id='chat-attachments' and (storage.foldername(name))[1]=(select auth.uid()::text)
+);
+drop policy if exists "Yaza users read own chat attachments" on storage.objects;
+create policy "Yaza users read own chat attachments" on storage.objects
+for select to authenticated using (
+  bucket_id='chat-attachments' and (storage.foldername(name))[1]=(select auth.uid()::text)
+);
+drop policy if exists "Yaza users delete own chat attachments" on storage.objects;
+create policy "Yaza users delete own chat attachments" on storage.objects
+for delete to authenticated using (
+  bucket_id='chat-attachments' and (storage.foldername(name))[1]=(select auth.uid()::text)
+);
