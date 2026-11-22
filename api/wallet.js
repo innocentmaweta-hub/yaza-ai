@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { getAdminClient } from "./_lib/paychangu.js";
+import { getAdminClient } from "../lib/paychangu.js";
 
 function reply(res, status, body) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
