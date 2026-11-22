@@ -181,6 +181,7 @@ function App() {
   const voiceBasePromptRef = useRef("");
   const [notice, setNotice] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const [exploreOpen, setExploreOpen] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [sharedView, setSharedView] = useState(null);
@@ -1105,7 +1106,7 @@ function App() {
         {!visibleChats.length && <p className="empty-search">{search ? "No conversations match your search" : showArchivedChats ? "No archived conversations" : "No conversations yet"}</p>}
       </div>
       <div className="side-bottom">
-        <div className="plan-card"><div className="plan-icon"><Zap size={16}/></div><div><strong>Yaza AI</strong><span>Your space to think bigger.</span></div><MoreHorizontal size={17}/></div>
+        <button type="button" className="plan-card explore-plan-card" onClick={() => setExploreOpen(true)}><div className="plan-icon"><Sparkles size={16}/></div><div><strong>Explore Yaza</strong><span>Discover tools, modes and features</span></div><ArrowUp size={16} className="explore-plan-arrow"/></button>
         <div className="account-menu-wrap">
           <button className="profile-row profile-action" aria-expanded={accountMenuOpen} onClick={() => setAccountMenuOpen(value => !value)}>
             <div className="avatar">{session ? (session.user.email?.[0] || "Y").toUpperCase() : "Y"}</div>
@@ -1153,6 +1154,22 @@ function App() {
         <div className="top-actions">{messages.length > 0 && <button className="share-conversation-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setShareError(""); setShareUrl(""); setShareOpen(true); }} disabled={sending}><Share2 size={14}/> Share</button>}<span className="private-label"><span></span> {session ? "Cloud synced" : cloudStatus || "Private session"}</span><button className="upgrade-btn" onClick={() => setNotice("Account plans will be available when Yaza accounts are enabled.")}> <Sparkles size={14}/> Explore Yaza</button></div>
       </header>
 
+      {exploreOpen && <div className="modal-backdrop explore-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setExploreOpen(false); }}>
+        <section className="explore-dialog" role="dialog" aria-modal="true" aria-labelledby="explore-title">
+          <button className="modal-close" onClick={() => setExploreOpen(false)} aria-label="Close Explore Yaza"><X size={17}/></button>
+          <div className="explore-dialog-heading"><div className="explore-dialog-icon"><Sparkles size={21}/></div><div><span className="eyebrow">DISCOVER YOUR AI WORKSPACE</span><h2 id="explore-title">Explore Yaza</h2><p>One AI workspace for learning, building, creating and getting things done.</p></div></div>
+          <h3>Choose how you want to use Yaza</h3>
+          <div className="explore-mode-grid">{Object.entries(CHAT_MODES).map(([id,item]) => { const Icon=item.icon; return <button type="button" key={id} className="explore-mode-card" onClick={() => { chooseMode(id); setExploreOpen(false); }}><span className="explore-mode-icon"><Icon size={18}/></span><span><strong>{item.label} mode</strong><small>{item.description}</small></span><ArrowUp size={14}/></button>; })}</div>
+          <h3>Tools at your fingertips</h3>
+          <div className="explore-tools-grid">
+            <button type="button" onClick={() => { setImageMode(true); setExploreOpen(false); }}><ImagePlus size={17}/><span><strong>Create images</strong><small>Turn a description into an image.</small></span></button>
+            <button type="button" onClick={() => { setWebSearchEnabled(true); setExploreOpen(false); }}><Globe2 size={17}/><span><strong>Web search</strong><small>Bring current information into chats.</small></span></button>
+            <button type="button" onClick={() => { setExploreOpen(false); setTimeout(() => fileInputRef.current?.click(), 0); }}><Plus size={17}/><span><strong>Work with files</strong><small>Ask questions about documents and images.</small></span></button>
+            <button type="button" onClick={() => { setExploreOpen(false); toggleVoiceInput(); }}><Mic size={17}/><span><strong>Voice conversations</strong><small>Speak your prompt and listen to replies.</small></span></button>
+          </div>
+          <p className="explore-dialog-footnote">Choose a mode or tool to jump straight into a new way of working with Yaza.</p>
+        </section>
+      </div>}
       {shareOpen && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setShareOpen(false); }}><section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title"><button className="modal-close" onClick={() => setShareOpen(false)} aria-label="Close"><X size={17}/></button><div className="share-dialog-icon"><Share2 size={19}/></div><h2 id="share-dialog-title">Share conversation</h2><p>Create a public, read-only link to this conversation. Anyone with the link can view its text, so only share content you are comfortable making public.</p><div className="share-privacy-note"><Check size={14}/> You can revoke the link at any time. Attachments are not included.</div>{shareUrl && <div className="share-url-row"><input readOnly value={shareUrl} aria-label="Public share link"/><button onClick={copyShareLink} title="Copy link"><Copy size={15}/></button></div>}{shareError && <p className="share-feedback">{shareError}</p>}<div className="share-dialog-actions"><button className="share-revoke-btn" onClick={revokeShareLinks} disabled={shareBusy}>Revoke links</button><button className="share-create-btn" onClick={createShareLink} disabled={shareBusy}>{shareBusy ? "Please wait…" : shareUrl ? "Create another link" : "Create public link"}</button></div></section></div>}
       <section className={`conversation ${isNew ? "welcome" : ""}`}>
         {isNew ? <div className="welcome-content">
