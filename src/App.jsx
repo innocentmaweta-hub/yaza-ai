@@ -4,9 +4,9 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
 import {
-  ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, Mic, MicOff,
+  ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, LogIn, LogOut, Mic, MicOff,
   FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal,
-  PanelLeftClose, Plus, Search, Settings2, Sparkles, SquarePen, Trash2,
+  PanelLeftClose, Plus, Search, Settings2, Sparkles, SquarePen, Trash2, UserRoundPlus,
   X, Zap
 } from "lucide-react";
 
@@ -60,6 +60,8 @@ function App() {
   const [notice, setNotice] = useState("");
   const [session, setSession] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -260,7 +262,7 @@ function App() {
   useEffect(() => {
     const onKey = e => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); document.querySelector(".search-input")?.focus(); }
-      if (e.key === "Escape") { setProviderMenu(false); setModelMenu(false); }
+      if (e.key === "Escape") { setProviderMenu(false); setModelMenu(false); setAccountMenuOpen(false); setSettingsOpen(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -668,7 +670,29 @@ function App() {
       </div>
       <div className="side-bottom">
         <div className="plan-card"><div className="plan-icon"><Zap size={16}/></div><div><strong>Yaza AI</strong><span>Your space to think bigger.</span></div><MoreHorizontal size={17}/></div>
-        <button className="profile-row profile-action" onClick={() => session ? signOut() : setAuthOpen(true)}><div className="avatar">{session ? (session.user.email?.[0] || "Y").toUpperCase() : "Y"}</div><div className="profile-copy"><strong>{session?.user?.email || "Guest"}</strong><span>{session ? "Sign out" : (supabase ? "Sign in to sync chats" : "Local workspace")}</span></div><Settings2 size={17}/></button>
+        <div className="account-menu-wrap">
+          <button className="profile-row profile-action" aria-expanded={accountMenuOpen} onClick={() => setAccountMenuOpen(value => !value)}>
+            <div className="avatar">{session ? (session.user.email?.[0] || "Y").toUpperCase() : "Y"}</div>
+            <div className="profile-copy"><strong>{session?.user?.email || "Guest"}</strong><span>{session ? "Account" : "Sign in or create an account"}</span></div>
+            <MoreHorizontal size={18}/>
+          </button>
+          {accountMenuOpen && <div className="account-menu">
+            <div className="account-menu-heading"><div className="avatar">{session ? (session.user.email?.[0] || "Y").toUpperCase() : "Y"}</div><div><strong>{session?.user?.email || "Guest"}</strong><span>{session ? "Yaza AI account" : "Local workspace"}</span></div></div>
+            <div className="account-menu-divider"/>
+            {session ? <>
+              <button onClick={() => { setSettingsOpen(true); setAccountMenuOpen(false); }}><Settings2 size={16}/> Settings</button>
+              <button onClick={() => { setAccountMenuOpen(false); setMemoryOpen(true); }}><Sparkles size={16}/> Personalization <span className="account-menu-count">{memories.length}</span></button>
+              {adminAccess && <button onClick={() => { setAccountMenuOpen(false); openAdminDashboard(); }}><Settings2 size={16}/> Admin dashboard</button>}
+              <div className="account-menu-divider"/>
+              <button className="account-menu-signout" onClick={() => { setAccountMenuOpen(false); signOut(); }}><LogOut size={16}/> Sign out</button>
+            </> : <>
+              <button onClick={() => { setAuthMode("signin"); setAuthOpen(true); setAccountMenuOpen(false); }}><LogIn size={16}/> Sign in</button>
+              <button onClick={() => { setAuthMode("signup"); setAuthOpen(true); setAccountMenuOpen(false); }}><UserRoundPlus size={16}/> Create account</button>
+              <div className="account-menu-divider"/>
+              <button onClick={() => { setSettingsOpen(true); setAccountMenuOpen(false); }}><Settings2 size={16}/> Settings</button>
+            </>}
+          </div>}
+        </div>
       </div>
     </aside>
 
@@ -770,6 +794,34 @@ function App() {
           {!memories.length && <div className="memory-empty">No saved memories yet. Add one above to get started.</div>}
         </div>
         <div className="memory-footnote">Memories are private to your account and are added as context to future AI chats. Avoid saving passwords or highly sensitive information.</div>
+      </section>
+    </div>}
+
+    {settingsOpen && <div className="auth-backdrop settings-backdrop" onClick={() => setSettingsOpen(false)}>
+      <section className="settings-dialog" onClick={event => event.stopPropagation()}>
+        <button className="auth-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button>
+        <div className="settings-title"><div className="auth-mark"><Settings2 size={21}/></div><div><h2>Settings</h2><p>Manage how Yaza AI works for you.</p></div></div>
+        <div className="settings-section">
+          <div className="settings-section-title">GENERAL</div>
+          <div className="settings-row"><div><strong>Language</strong><span>Interface language</span></div><span className="settings-value">English</span></div>
+          <div className="settings-row"><div><strong>Appearance</strong><span>Yaza's current interface theme</span></div><span className="settings-value">Dark</span></div>
+        </div>
+        <div className="settings-section">
+          <div className="settings-section-title">AI PREFERENCES</div>
+          <label className="settings-field"><span>Default AI provider</span><select value={provider} onChange={event => chooseProvider(event.target.value)}>{Object.entries(PROVIDERS).map(([id,item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
+          <label className="settings-field"><span>Default model</span><select value={model} onChange={event => setModel(event.target.value)}>{PROVIDERS[provider].models.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <p className="settings-help">Your provider and model choice is saved in this browser and used as the starting selection for new chats.</p>
+        </div>
+        <div className="settings-section">
+          <div className="settings-section-title">PERSONALIZATION</div>
+          <button className="settings-link-row" onClick={() => { setSettingsOpen(false); if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); } else setMemoryOpen(true); }}><div><strong>Manage memories</strong><span>Review, edit, or delete what Yaza remembers</span></div><span> {memories.length} <ChevronDown size={15}/></span></button>
+        </div>
+        <div className="settings-section">
+          <div className="settings-section-title">ACCOUNT & DATA</div>
+          <div className="settings-row"><div><strong>Account</strong><span>{session?.user?.email || "Not signed in"}</span></div>{session ? <button className="settings-text-button" onClick={() => { setSettingsOpen(false); signOut(); }}>Sign out</button> : <button className="settings-text-button" onClick={() => { setSettingsOpen(false); setAuthMode("signin"); setAuthOpen(true); }}>Sign in</button>}</div>
+          <p className="settings-help">When signed in, your conversations and saved memories are synced to your Yaza account. Attachments are stored privately.</p>
+        </div>
+        <div className="settings-footer"><span>Yaza AI settings</span><button className="auth-submit" onClick={() => setSettingsOpen(false)}>Done</button></div>
       </section>
     </div>}
 
