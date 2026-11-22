@@ -81,7 +81,7 @@ function readProviderSettings() {
 
 function renderInlineMarkdown(value) {
   const text = String(value || "");
-  const tokenPattern = /(\`[^\`]+\`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
+  const tokenPattern = /(\`[^\`]+\`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|(?:https?:\/\/|www\.)[^\s<>()]+)/g;
   return text.split(tokenPattern).filter(Boolean).map((part, index) => {
     if (part.startsWith("\`") && part.endsWith("\`")) return <code className="md-inline-code" key={index}>{part.slice(1, -1)}</code>;
     if ((part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"))) return <strong key={index}>{part.slice(2, -2)}</strong>;
@@ -89,6 +89,12 @@ function renderInlineMarkdown(value) {
     if ((part.startsWith("*") && part.endsWith("*")) || (part.startsWith("_") && part.endsWith("_"))) return <em key={index}>{part.slice(1, -1)}</em>;
     const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
     if (link) return <a key={index} href={link[2]} target="_blank" rel="noopener noreferrer">{link[1]}</a>;
+    if (/^(?:https?:\/\/|www\.)/i.test(part)) {
+      const trailing = part.match(/[.,!?;:]+$/)?.[0] || "";
+      const url = trailing ? part.slice(0, -trailing.length) : part;
+      const href = /^www\./i.test(url) ? \`https://\${url}\` : url;
+      return <Fragment key={index}><a href={href} target="_blank" rel="noopener noreferrer">{url}</a>{trailing}</Fragment>;
+    }
     return part;
   });
 }
@@ -1074,6 +1080,16 @@ function App() {
     URL.revokeObjectURL(url);
     setNotice("Your conversation export has been prepared as a JSON file.");
   }
+  function handlePromptChange(e) {
+    setPrompt(e.target.value);
+    const textarea = e.target;
+    textarea.style.height = "auto";
+    const lineHeight = Number.parseFloat(getComputedStyle(textarea).lineHeight) || 21;
+    const maxHeight = lineHeight * 7 + 11;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
   function handlePromptKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
@@ -1192,7 +1208,7 @@ function App() {
         {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}><X size={14}/></button></div>}
         <form className="composer" onSubmit={handleSubmit}>
           {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
-          <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder={imageMode ? "Describe the image you want Yaza AI to create..." : activeMode === "joking" ? "Ask anything — Yaza will make it funny..." : "Message Yaza AI..."} rows={1} disabled={sending}/>
+          <textarea ref={textareaRef} value={prompt} onChange={handlePromptChange} onKeyDown={handlePromptKey} placeholder={imageMode ? "Describe the image you want Yaza AI to create..." : activeMode === "joking" ? "Ask anything — Yaza will make it funny..." : "Message Yaza AI..."} rows={1} disabled={sending}/>
           <div className="composer-bottom">
             <div className="composer-tools"><div className="dropdown-wrap mode-picker-wrap"><button type="button" className={`tool-btn tool-label mode-picker ${modeMenu ? "tool-active" : ""}`} onClick={() => setModeMenu(value => !value)} aria-expanded={modeMenu} title="Choose a Yaza mode" disabled={sending}><Sparkles size={15}/> <span>{modeDetails.label} mode</span><ChevronDown size={13}/></button>{modeMenu && <div className="dropdown mode-dropdown">{Object.entries(CHAT_MODES).map(([id, item]) => <button type="button" key={id} onClick={() => chooseMode(id)}><span><strong>{item.label}</strong><small>{item.description}</small></span>{activeMode === id && <Check size={15}/>}</button>)}</div>}</div><button type="button" className={`tool-btn tool-label ${imageMode ? "tool-active" : ""}`} onClick={() => setImageMode(value => !value)} aria-pressed={imageMode} title={imageMode ? "Return to chat" : "Create an image"} disabled={sending}><ImagePlus size={15}/> <span>{imageMode ? "Image on" : "Image"}</span></button><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className={`tool-btn tool-label ${voiceListening ? "tool-active voice-active" : ""}`} onClick={toggleVoiceInput} aria-pressed={voiceListening} title={!voiceInputEnabled ? "Voice input is disabled in Settings" : voiceListening ? "Stop voice input" : "Start voice input"} disabled={sending || !voiceInputEnabled}><>{voiceListening ? <MicOff size={15}/> : <Mic size={15}/>} <span>{voiceListening ? "Listening" : "Voice"}</span></></button></div>
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
