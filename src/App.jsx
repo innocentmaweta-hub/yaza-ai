@@ -22,7 +22,40 @@ const PROVIDERS = {
   yaza: { label: "Yaza AI", models: [{ id: "wachabe", label: "Wachabe" }] }
 };
 const STORAGE = "yaza-ai-conversations-v1";
-const makeChat = () => ({ id: crypto.randomUUID(), title: "New chat", messages: [], updatedAt: Date.now() });
+const CHAT_MODES = {
+  general: { label: "General", description: "Your everyday AI assistant", prompts: [
+    { icon: Compass, title: "Explore an idea", text: "Help me explore a new idea and turn it into a plan." },
+    { icon: Code2, title: "Write code", text: "Help me build a clean, modern web application." },
+    { icon: FileText, title: "Write something", text: "Help me write a clear and compelling document." },
+    { icon: Globe2, title: "Understand a topic", text: "Explain a complex topic in simple, practical terms." }
+  ] },
+  school: { label: "School", description: "Learn, practise and prepare", prompts: [
+    { icon: FileText, title: "Explain a topic", text: "Teach me a difficult topic step by step, with simple examples." },
+    { icon: Code2, title: "Practise questions", text: "Give me practice questions and mark my answers with explanations." },
+    { icon: Compass, title: "Create revision notes", text: "Turn this topic into clear, exam-ready revision notes." },
+    { icon: Globe2, title: "Prepare for exams", text: "Help me prepare a study timetable for my next exams." }
+  ] },
+  innovator: { label: "Innovator", description: "Turn problems into practical solutions", prompts: [
+    { icon: Compass, title: "Find a problem to solve", text: "Help me identify an important problem and develop an innovative solution." },
+    { icon: Code2, title: "Design a prototype", text: "Help me design a practical prototype, including how it could work." },
+    { icon: FileText, title: "Test feasibility", text: "Assess the technical and financial feasibility of my invention idea." },
+    { icon: Globe2, title: "Create a pitch", text: "Help me turn my innovation into a compelling project pitch." }
+  ] },
+  entrepreneur: { label: "Entrepreneur", description: "Build and grow a business", prompts: [
+    { icon: Compass, title: "Develop a business idea", text: "Help me turn a business idea into a practical business model." },
+    { icon: Code2, title: "Calculate the numbers", text: "Help me estimate startup costs, pricing, margins and break-even." },
+    { icon: FileText, title: "Write a business plan", text: "Help me create a clear, realistic business plan." },
+    { icon: Globe2, title: "Grow my business", text: "Suggest practical marketing and customer-growth strategies." }
+  ] },
+  joking: { label: "Joking", description: "Funny answers, playful ideas and good vibes", prompts: [
+    { icon: Sparkles, title: "Make me laugh", text: "Tell me something genuinely funny." },
+    { icon: Compass, title: "Funny explanation", text: "Explain a complicated topic in a funny way." },
+    { icon: FileText, title: "Create a joke", text: "Write a clever joke I can share with my friends." },
+    { icon: Globe2, title: "Funny story", text: "Tell me a hilarious short story with an unexpected ending." }
+  ] }
+};
+const validChatMode = value => Object.prototype.hasOwnProperty.call(CHAT_MODES, value) ? value : "general";
+const makeChat = () => ({ id: crypto.randomUUID(), title: "New chat", mode: "general", messages: [], updatedAt: Date.now() });
 const PROVIDER_SETTINGS = "yaza-ai-provider-settings-v1";
 const USER_PREFERENCES = "yaza-ai-user-preferences-v1";
 const DEFAULT_PREFERENCES = { theme: "dark", voiceInputEnabled: true, readAloudEnabled: true };
@@ -135,6 +168,7 @@ function App() {
   const [showArchivedChats, setShowArchivedChats] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [imageMode, setImageMode] = useState(false);
+  const [modeMenu, setModeMenu] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const recognitionRef = useRef(null);
@@ -266,7 +300,7 @@ function App() {
   async function loadCloudChats(userId) {
     if (!supabase) return;
     try {
-      const { data: rows, error } = await supabase.from("conversations").select("id,title,updated_at,is_archived").eq("user_id", userId).order("updated_at", { ascending: false });
+      const { data: rows, error } = await supabase.from("conversations").select("id,title,mode,updated_at,is_archived").eq("user_id", userId).order("updated_at", { ascending: false });
       if (error) throw error;
       const ids = (rows || []).map(row => row.id);
       let messageRows = [];
@@ -276,7 +310,7 @@ function App() {
         messageRows = result.data || [];
       }
       const remoteChats = (rows || []).map(row => ({
-        id: row.id, title: row.title, isArchived: row.is_archived === true, updatedAt: new Date(row.updated_at).getTime(),
+        id: row.id, title: row.title, mode: validChatMode(row.mode), isArchived: row.is_archived === true, updatedAt: new Date(row.updated_at).getTime(),
         messages: messageRows.filter(m => m.conversation_id === row.id).map(m => ({ id: m.id, role: m.role, content: m.content, provider: m.provider, model: m.model, attachments: m.attachments || [] }))
       }));
       if (remoteChats.length) { setChats(remoteChats); setActiveId((remoteChats.find(chat => !chat.isArchived) || remoteChats[0]).id); }
@@ -295,6 +329,7 @@ function App() {
         for (const chat of chats) {
           const { error: conversationError } = await supabase.from("conversations").upsert({
             id: chat.id, user_id: session.user.id, title: chat.title,
+            mode: validChatMode(chat.mode),
             is_archived: chat.isArchived === true,
             updated_at: new Date(chat.updatedAt || Date.now()).toISOString()
           });
@@ -545,10 +580,18 @@ function App() {
   }
   function newChat() {
     const chat = makeChat();
+    setImageMode(false);
+    setModeMenu(false);
     setChats(old => [chat, ...old]);
     setActiveId(chat.id);
     setPrompt("");
     setNotice("");
+  }
+  function chooseMode(mode) {
+    if (!activeChat) return;
+    updateChat(activeChat.id, chat => ({ ...chat, mode: validChatMode(mode) }));
+    setModeMenu(false);
+    setImageMode(false);
   }
   function chooseProvider(id) {
     setProvider(id);
@@ -677,8 +720,9 @@ function App() {
     }
     let chat = activeChat;
     if (!chat) { chat = makeChat(); setChats([chat]); setActiveId(chat.id); }
+    const chatMode = validChatMode(chat.mode);
     const userMessageId = crypto.randomUUID();
-    const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, streaming: true };
+    const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, mode: chatMode, streaming: true };
     setPrompt("");
     setAttachments([]);
     setSending(true);
@@ -723,7 +767,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: "Bearer " + session.access_token } : {}) },
         body: JSON.stringify({
-          provider, model,
+          provider, model, mode: chatMode,
           memories: memories.map(item => item.content),
           messages: nextMessages.map((message, index) => ({ role: message.role, content: index === nextMessages.length - 1 ? message.content + webContext : message.content })),
           attachments: pendingAttachments.flatMap(({ name, type, kind, data, text, ocrImages }) => [
@@ -794,6 +838,7 @@ function App() {
     try {
       const { error: conversationSaveError } = await supabase.from("conversations").upsert({
         id: activeChat.id, user_id: session.user.id, title: activeChat.title,
+        mode: validChatMode(activeChat.mode),
         is_archived: activeChat.isArchived === true,
         updated_at: new Date(activeChat.updatedAt || Date.now()).toISOString()
       });
@@ -1024,12 +1069,9 @@ function App() {
   function handlePromptKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
-  const suggestions = [
-    { icon: Compass, title: "Explore an idea", text: "Help me explore a new idea and turn it into a plan." },
-    { icon: Code2, title: "Write code", text: "Help me build a clean, modern web application." },
-    { icon: FileText, title: "Write something", text: "Help me write a clear and compelling document." },
-    { icon: Globe2, title: "Understand a topic", text: "Explain a complex topic in simple, practical terms." }
-  ];
+  const activeMode = validChatMode(activeChat?.mode);
+  const modeDetails = CHAT_MODES[activeMode];
+  const suggestions = modeDetails.prompts;
 
   if (shareLoading) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><p>Loading shared conversation…</p></div></div>;
   if (shareError && !sharedView && new URLSearchParams(window.location.search).has("share")) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><h1>Shared conversation unavailable</h1><p>{shareError}</p><a href="/">Open Yaza AI</a></div></div>;
@@ -1109,9 +1151,9 @@ function App() {
       <section className={`conversation ${isNew ? "welcome" : ""}`}>
         {isNew ? <div className="welcome-content">
           <div className="welcome-emblem"><span><Sparkles size={25}/></span><i></i><b></b></div>
-          <div className="eyebrow"><span></span> YOUR AI, YOUR POSSIBILITIES</div>
-          <h1>What can we <em>create</em><br/>today?</h1>
-          <p className="welcome-subtitle">A clearer way to think, discover, and get things done.<br className="desktop-break"/> Ask Yaza anything — let's make something meaningful.</p>
+          <div className="eyebrow"><span></span> {modeDetails.label.toUpperCase()} MODE</div>
+          <h1>{activeMode === "school" ? <>What shall we <em>learn</em><br/>today?</> : activeMode === "innovator" ? <>What shall we <em>invent</em><br/>today?</> : activeMode === "entrepreneur" ? <>What shall we <em>build</em><br/>today?</> : activeMode === "joking" ? <>Ready for some <em>fun</em><br/>today?</> : <>What can we <em>create</em><br/>today?</>}</h1>
+          <p className="welcome-subtitle">{modeDetails.description}.<br className="desktop-break"/> {activeMode === "joking" ? "Ask anything. Serious answers have been warned." : "Choose a suggestion or ask Yaza anything."}</p>
           <div className="suggestion-grid">{suggestions.map(({icon:Icon,title,text}) => <button className="suggestion-card" key={title} onClick={() => setPrompt(text)}><span className="suggestion-icon"><Icon size={18}/></span><span><strong>{title}</strong><small>{text}</small></span><ArrowUp size={15} className="suggestion-arrow"/></button>)}</div>
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
@@ -1128,7 +1170,7 @@ function App() {
           {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
           <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder={imageMode ? "Describe the image you want Yaza AI to create..." : "Message Yaza AI..."} rows={1} disabled={sending}/>
           <div className="composer-bottom">
-            <div className="composer-tools"><button type="button" className={`tool-btn tool-label ${imageMode ? "tool-active" : ""}`} onClick={() => setImageMode(value => !value)} aria-pressed={imageMode} title={imageMode ? "Return to chat" : "Create an image"} disabled={sending}><ImagePlus size={15}/> <span>{imageMode ? "Image mode on" : "Create image"}</span></button><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className={`tool-btn tool-label ${voiceListening ? "tool-active voice-active" : ""}`} onClick={toggleVoiceInput} aria-pressed={voiceListening} title={!voiceInputEnabled ? "Voice input is disabled in Settings" : voiceListening ? "Stop voice input" : "Start voice input"} disabled={sending || !voiceInputEnabled}><>{voiceListening ? <MicOff size={15}/> : <Mic size={15}/>} <span>{voiceListening ? "Listening" : "Voice"}</span></></button></div>
+            <div className="composer-tools"><div className="dropdown-wrap mode-picker-wrap"><button type="button" className={`tool-btn tool-label mode-picker ${modeMenu ? "tool-active" : ""}`} onClick={() => setModeMenu(value => !value)} aria-expanded={modeMenu} title="Choose a Yaza mode" disabled={sending}><Sparkles size={15}/> <span>{modeDetails.label} mode</span><ChevronDown size={13}/></button>{modeMenu && <div className="dropdown mode-dropdown">{Object.entries(CHAT_MODES).map(([id, item]) => <button type="button" key={id} onClick={() => chooseMode(id)}><span><strong>{item.label}</strong><small>{item.description}</small></span>{activeMode === id && <Check size={15}/>}</button>)}</div>}</div><button type="button" className={`tool-btn tool-label ${imageMode ? "tool-active" : ""}`} onClick={() => setImageMode(value => !value)} aria-pressed={imageMode} title={imageMode ? "Return to chat" : "Create an image"} disabled={sending}><ImagePlus size={15}/> <span>{imageMode ? "Image on" : "Image"}</span></button><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className={`tool-btn tool-label ${voiceListening ? "tool-active voice-active" : ""}`} onClick={toggleVoiceInput} aria-pressed={voiceListening} title={!voiceInputEnabled ? "Voice input is disabled in Settings" : voiceListening ? "Stop voice input" : "Start voice input"} disabled={sending || !voiceInputEnabled}><>{voiceListening ? <MicOff size={15}/> : <Mic size={15}/>} <span>{voiceListening ? "Listening" : "Voice"}</span></></button></div>
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
