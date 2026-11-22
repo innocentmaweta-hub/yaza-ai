@@ -81,3 +81,18 @@ create policy "Users manage their own memories" on public.user_memories
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 grant select, insert, update, delete on public.user_memories to authenticated;
+
+
+-- Per-account preferences for provider/model, theme, and voice controls.
+create table if not exists public.user_preferences (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  preferences jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.user_preferences enable row level security;
+drop policy if exists "Users manage their own preferences" on public.user_preferences;
+create policy "Users manage their own preferences" on public.user_preferences
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+grant select, insert, update, delete on public.user_preferences to authenticated;
