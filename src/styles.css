@@ -401,3 +401,7 @@
 .theme-light .usage-model-list{border-color:#e2e3e8}
 .theme-light .usage-model-list>div{border-color:#e2e3e8}
 .theme-light .usage-track{background:#e6e6eb}
+
+.usage-user-table{overflow-x:auto}
+.usage-user-table .admin-table-row{min-width:600px;grid-template-columns:1.4fr .55fr 1fr .9fr}
+.usage-user-table .admin-table-row>*:last-child{text-align:right}
