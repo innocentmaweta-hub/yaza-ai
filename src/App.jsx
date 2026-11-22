@@ -3,13 +3,14 @@ import { supabase } from "./lib/supabase.js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 import {
   ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass,
   FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal,
   PanelLeftClose, Plus, Search, Settings2, Sparkles, SquarePen, Trash2,
   X, Zap
 } from "lucide-react";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const PROVIDERS = {
   openai: { label: "OpenAI", models: [{ id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
@@ -208,10 +209,13 @@ function App() {
     const chosen = supported.slice(0, remaining);
     if (supported.length > remaining) setNotice("You can attach up to 5 files per message.");
     try {
+      const imageBytes = attachments.filter(file => file.kind === "image").reduce((sum, file) => sum + (file.file?.size || 0), 0) + chosen.filter(file => file.type.startsWith("image/")).reduce((sum, file) => sum + file.size, 0);
+      if (imageBytes > 2.8 * 1024 * 1024) throw new Error("Please keep the combined image attachments below 2.8 MB per message.");
       const loaded = await Promise.all(chosen.map(async file => {
         if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB. Please choose a smaller file.`);
         const id = crypto.randomUUID();
         if (file.type.startsWith("image/")) {
+          if (file.size > 2.5 * 1024 * 1024) throw new Error(`${file.name} is larger than 2.5 MB. Please choose a smaller image.`);
           return { id, name: file.name, type: file.type, kind: "image", data: await readFileAsDataUrl(file), file };
         }
         if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
