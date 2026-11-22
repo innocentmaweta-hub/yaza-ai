@@ -4,7 +4,7 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
 import {
-  Archive, ArchiveRestore, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, Copy, LogIn, LogOut, Mic, MicOff,
+  Archive, ArchiveRestore, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, Copy, CreditCard, LogIn, LogOut, Mic, MicOff,
   FileText, Globe2, ImagePlus, Link2, Menu, MessageSquare, MoreHorizontal, Pencil,
   PanelLeftClose, Plus, Search, Settings2, Share2, Sparkles, SquarePen, Trash2, UserRoundPlus,
   X, Zap
@@ -206,7 +206,7 @@ function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession || null);
-      if (!nextSession) { setPreferencesReady(false); setPreferencesStatus("This browser"); setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); setUsageData(null); setUsageError(""); }
+      if (!nextSession) { setPreferencesReady(false); setPreferencesStatus("This browser"); setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); setUsageData(null); setUsageError(""); setWalletData(null); setWalletError(""); }
       else { setPreferencesReady(false); setCloudReady(false); setTimeout(async () => { await loadCloudPreferences(nextSession.user.id); await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); }, 0); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
@@ -478,6 +478,21 @@ function App() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const txRef = params.get("tx_ref");
+    if (params.get("payment") === "return" && txRef && session?.access_token) {
+      let alive = true;
+      (async () => {
+        try {
+          const response = await fetch("/api/payments/verify", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + session.access_token }, body:JSON.stringify({ tx_ref:txRef }) });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || "Could not verify the PayChangu payment.");
+          if (alive) { setSettingsOpen(true); setSettingsTab("billing"); setNotice(data.status==="success" ? "Your Yaza wallet top-up has been confirmed." : data.status==="pending" ? "PayChangu is still processing your payment. Refresh your wallet shortly." : "The payment was not completed."); await loadWallet(); }
+        } catch (error) { if (alive) { setSettingsOpen(true); setSettingsTab("billing"); setWalletError(error.message || "Payment verification failed."); } }
+        finally { const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete("payment"); cleanUrl.searchParams.delete("tx_ref"); cleanUrl.searchParams.delete("status"); window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash); }
+      })();
+      return () => { alive = false; };
+    }
     const token = new URLSearchParams(window.location.search).get("share");
     if (!token) return;
     let alive = true;
@@ -639,6 +654,7 @@ function App() {
   async function sendMessage(text = prompt) {
     const content = text.trim();
     if ((!content && !attachments.length) || sending) return;
+    if (!session?.user) { setNotice("Sign in to use Yaza AI. Paid model access requires a wallet."); setAuthMode("signin"); setAuthOpen(true); return; }
     const pendingAttachments = attachments;
     const messageContent = content || "Please review the attached file(s).";
     if (pendingAttachments.length && (!supabase || !session?.user)) {
@@ -704,6 +720,7 @@ function App() {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
+        if (response.status === 402) { setSettingsOpen(true); setSettingsTab("billing"); loadWallet(); }
         throw new Error(data.error || "Something went wrong.");
       }
       if (!response.body) throw new Error("Streaming is not supported by this browser. Please refresh and try again.");
@@ -1039,6 +1056,7 @@ function App() {
             <div className="account-menu-heading"><div className="avatar">{session ? (session.user.email?.[0] || "Y").toUpperCase() : "Y"}</div><div><strong>{session?.user?.email || "Guest"}</strong><span>{session ? "Yaza AI account" : "Local workspace"}</span></div></div>
             <div className="account-menu-divider"/>
             {session ? <>
+              <button onClick={() => { setSettingsOpen(true); setSettingsTab("billing"); setAccountMenuOpen(false); loadWallet(); }}><CreditCard size={16}/> Wallet</button>
               <button onClick={() => { setSettingsOpen(true); setAccountMenuOpen(false); }}><Settings2 size={16}/> Settings</button>
               <button onClick={() => { setAccountMenuOpen(false); setMemoryOpen(true); }}><Sparkles size={16}/> Personalization <span className="account-menu-count">{memories.length}</span></button>
               {adminAccess && <button onClick={() => { setAccountMenuOpen(false); openAdminDashboard(); }}><Settings2 size={16}/> Admin dashboard</button>}
@@ -1189,7 +1207,7 @@ function App() {
         <aside className="settings-sidebar">
           <div className="settings-sidebar-top"><div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Settings</strong><span>Yaza AI preferences</span></div></div><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
           <nav className="settings-nav" aria-label="Settings sections">
-            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["usage","Usage"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => { setSettingsTab(id); if (id === "usage") loadUsageReport(); }}>{label}</button>)}
+            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["billing","Billing"],["usage","Usage"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => { setSettingsTab(id); if (id === "usage") loadUsageReport(); if (id === "billing") loadWallet(); }}>{label}</button>)}
           </nav>
           <div className="settings-sidebar-bottom"><span>Yaza AI</span><span>Settings</span></div>
         </aside>
@@ -1212,8 +1230,29 @@ function App() {
             <div className="settings-option"><div><strong>Read aloud</strong><span>Allow assistant replies to be spoken using your browser voice.</span></div><label className="settings-toggle"><input type="checkbox" checked={readAloudEnabled} onChange={event => setReadAloudEnabled(event.target.checked)}/><span>{readAloudEnabled ? "On" : "Off"}</span></label></div>
             <div className="settings-info-note">Voice availability and voices depend on your browser and device. Chrome generally provides the best support.</div>
           </section>}
+          {settingsTab==="billing" && <section className="settings-panel-section"><h2>Wallet & billing</h2><p className="settings-panel-intro">Add money securely with PayChangu and use your balance for Yaza AI model requests.</p>
+            {!session && <div className="settings-info-note">Sign in to open a wallet, make top-ups and pay for AI usage.</div>}
+            {session && <>
+              {walletLoading && <div className="settings-info-note">Loading your wallet…</div>}
+              {walletError && <div className="settings-info-note">{walletError}</div>}
+              <div className="wallet-balance-card"><span>Available wallet balance</span><strong>MK {(Number(walletData?.balanceMinor || 0)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong><small>Malawi Kwacha · Balance shown in MWK</small></div>
+              <div className="wallet-topup-card"><strong>Add funds</strong><span>Choose a whole MWK amount. PayChangu securely handles checkout.</span>
+                <label>Top-up amount (MWK)<input type="number" min="500" max="500000" step="1" value={topupAmount} onChange={event => setTopupAmount(event.target.value)} /></label>
+                <button className="settings-primary-action" onClick={startWalletTopup} disabled={topupBusy}>{topupBusy ? "Connecting to PayChangu…" : "Continue to PayChangu"}</button>
+              </div>
+              <div className="wallet-history-heading"><strong>Recent wallet activity</strong><button onClick={loadWallet} disabled={walletLoading}>Refresh</button></div>
+              <div className="wallet-history-list">
+                {(walletData?.transactions || []).map(item => <div className="wallet-history-item" key={item.id}>
+                  <div><strong>{item.description || item.kind.replace(/_/g," ")}</strong><span>{new Date(item.created_at).toLocaleString()}</span></div>
+                  <strong className={Number(item.amount_minor)>=0?"wallet-credit":"wallet-debit"}>{Number(item.amount_minor)>=0?"+":"−"}MK {(Math.abs(Number(item.amount_minor))/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>
+                </div>)}
+                {!walletLoading && !(walletData?.transactions || []).length && <div className="settings-info-note">No wallet transactions yet. Your first confirmed top-up will appear here.</div>}
+              </div>
+              <div className="settings-info-note">Top-ups are credited only after Yaza verifies the transaction directly with PayChangu. Model usage is reserved before a response and reconciled after completion.</div>
+            </>}
+          </section>}
           {settingsTab==="usage" && <section className="settings-panel-section"><h2>Usage</h2><p className="settings-panel-intro">Review your Yaza request allowance and recent AI usage.</p>
-            {!session && <div className="settings-info-note">Sign in to see your account usage. Guest requests have a smaller daily allowance.</div>}
+            {!session && <div className="settings-info-note">Sign in to see your account usage and wallet billing details.</div>}
             {usageLoading && <div className="settings-info-note">Loading your usage report…</div>}
             {usageError && <div className="settings-info-note">{usageError}</div>}
             {usageData && <>
