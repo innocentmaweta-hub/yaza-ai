@@ -266,7 +266,7 @@ export default async function handler(req, res) {
   }
   let quotaContext;
   try {
-    quotaContext = await prepareQuota(req, provider, model, { skipLimits: lastChoiceRequest });
+    quotaContext = await prepareQuota(req, provider, model, { skipLimits: lastChoiceRequest || !(provider === "openrouter" && model === "openrouter/free") });
   } catch (error) {
     return res.status(error.status || 503).json({ error: error.message, quota: error.quota || undefined });
   }
