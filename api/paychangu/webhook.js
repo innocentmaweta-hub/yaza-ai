@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { getAdminClient, verifyAndCreditTopup } from "../_lib/paychangu.js";
+import { getAdminClient, verifyAndCreditTopup } from "../../lib/paychangu.js";
 
 export const config = { api: { bodyParser: false } };
 
