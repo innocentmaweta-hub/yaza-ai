@@ -23,31 +23,37 @@ const PROVIDERS = {
 };
 const STORAGE = "yaza-ai-conversations-v1";
 const CHAT_MODES = {
-  general: { label: "General", description: "Your everyday AI assistant", prompts: [
+  general: { label: "General", description: "Your everyday AI assistant", icon: Compass, prompts: [
     { icon: Compass, title: "Explore an idea", text: "Help me explore a new idea and turn it into a plan." },
     { icon: Code2, title: "Write code", text: "Help me build a clean, modern web application." },
     { icon: FileText, title: "Write something", text: "Help me write a clear and compelling document." },
     { icon: Globe2, title: "Understand a topic", text: "Explain a complex topic in simple, practical terms." }
   ] },
-  school: { label: "School", description: "Learn, practise and prepare", prompts: [
+  school: { label: "School", description: "Learn, practise and prepare", icon: FileText, prompts: [
     { icon: FileText, title: "Explain a topic", text: "Teach me a difficult topic step by step, with simple examples." },
     { icon: Code2, title: "Practise questions", text: "Give me practice questions and mark my answers with explanations." },
     { icon: Compass, title: "Create revision notes", text: "Turn this topic into clear, exam-ready revision notes." },
     { icon: Globe2, title: "Prepare for exams", text: "Help me prepare a study timetable for my next exams." }
   ] },
-  innovator: { label: "Innovator", description: "Turn problems into practical solutions", prompts: [
+  innovator: { label: "Innovator", description: "Turn problems into practical solutions", icon: Code2, prompts: [
     { icon: Compass, title: "Find a problem to solve", text: "Help me identify an important problem and develop an innovative solution." },
     { icon: Code2, title: "Design a prototype", text: "Help me design a practical prototype, including how it could work." },
     { icon: FileText, title: "Test feasibility", text: "Assess the technical and financial feasibility of my invention idea." },
     { icon: Globe2, title: "Create a pitch", text: "Help me turn my innovation into a compelling project pitch." }
   ] },
-  entrepreneur: { label: "Entrepreneur", description: "Build and grow a business", prompts: [
+  entrepreneur: { label: "Entrepreneur", description: "Build and grow a business", icon: Compass, prompts: [
     { icon: Compass, title: "Develop a business idea", text: "Help me turn a business idea into a practical business model." },
     { icon: Code2, title: "Calculate the numbers", text: "Help me estimate startup costs, pricing, margins and break-even." },
     { icon: FileText, title: "Write a business plan", text: "Help me create a clear, realistic business plan." },
     { icon: Globe2, title: "Grow my business", text: "Suggest practical marketing and customer-growth strategies." }
   ] },
-  joking: { label: "Joking", description: "Funny answers, playful ideas and good vibes", prompts: [
+  developer: { label: "Developer", description: "Build, debug and ship software", icon: Code2, prompts: [
+    { icon: Code2, title: "Build an application", text: "Help me plan and build a production-ready application. Ask for any essential missing requirements first." },
+    { icon: Compass, title: "Debug an issue", text: "Help me diagnose this software issue systematically. Explain the likely root cause and propose a safe fix." },
+    { icon: FileText, title: "Review my code", text: "Review my code for bugs, security issues, performance and maintainability, then suggest concrete improvements." },
+    { icon: Globe2, title: "Design an architecture", text: "Help me design a scalable application architecture, including APIs, database and deployment." }
+  ] },
+  joking: { label: "Joking", description: "Funny answers, playful ideas and good vibes", icon: Sparkles, prompts: [
     { icon: Sparkles, title: "Make me laugh", text: "Tell me something genuinely funny." },
     { icon: Compass, title: "Funny explanation", text: "Explain a complicated topic in a funny way." },
     { icon: FileText, title: "Create a joke", text: "Write a clever joke I can share with my friends." },
@@ -1152,9 +1158,9 @@ function App() {
         {isNew ? <div className="welcome-content">
           <div className="welcome-emblem"><span><Sparkles size={25}/></span><i></i><b></b></div>
           <div className="eyebrow"><span></span> {modeDetails.label.toUpperCase()} MODE</div>
-          <h1>{activeMode === "school" ? <>What shall we <em>learn</em><br/>today?</> : activeMode === "innovator" ? <>What shall we <em>invent</em><br/>today?</> : activeMode === "entrepreneur" ? <>What shall we <em>build</em><br/>today?</> : activeMode === "joking" ? <>Ready for some <em>fun</em><br/>today?</> : <>What can we <em>create</em><br/>today?</>}</h1>
+          <h1>{activeMode === "school" ? <>What shall we <em>learn</em><br/>today?</> : activeMode === "innovator" ? <>What shall we <em>invent</em><br/>today?</> : activeMode === "entrepreneur" ? <>What shall we <em>build</em><br/>today?</> : activeMode === "joking" ? <>Ready for some <em>fun</em><br/>today?</> : activeMode === "developer" ? <>What shall we <em>build</em><br/>today?</> : <>What can we <em>create</em><br/>today?</>}</h1>
           <p className="welcome-subtitle">{modeDetails.description}.<br className="desktop-break"/> {activeMode === "joking" ? "Ask anything. Serious answers have been warned." : "Choose a suggestion or ask Yaza anything."}</p>
-          <div className="suggestion-grid">{suggestions.map(({icon:Icon,title,text}) => <button className="suggestion-card" key={title} onClick={() => setPrompt(text)}><span className="suggestion-icon"><Icon size={18}/></span><span><strong>{title}</strong><small>{text}</small></span><ArrowUp size={15} className="suggestion-arrow"/></button>)}</div>
+          <div className="mode-card-grid">{Object.entries(CHAT_MODES).map(([id, item]) => { const Icon = item.icon; return <button type="button" className={`mode-card ${activeMode === id ? "selected" : ""}`} key={id} onClick={() => chooseMode(id)} aria-pressed={activeMode === id}><span className="mode-card-icon"><Icon size={19}/></span><span className="mode-card-copy"><strong>{item.label} Mode</strong><small>{item.description}</small></span><ArrowUp size={15} className="mode-card-arrow"/></button>; })}</div>
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
