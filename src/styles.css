@@ -234,3 +234,15 @@
 .theme-light .account-menu>button:hover{background:#f1f1f5}
 .theme-light .settings-danger-action{background:#fff5f4;color:#a64b47}
 @media(max-width:640px){.theme-light .settings-page{background:#fff}}
+
+.delete-account-dialog{border-color:#75413f}
+.delete-account-dialog h2{color:#f1d9d7}
+.delete-account-dialog>p{color:#b7a5a5}
+.delete-account-input{width:100%;margin-top:10px;padding:12px;border:1px solid #604244;border-radius:9px;outline:none;background:#211b1e;color:#f3e9e9;font:inherit;font-size:12px}
+.delete-account-input:focus{border-color:#d68c84}
+.delete-account-confirm{margin-top:17px!important;width:100%;justify-content:center}
+.delete-account-confirm:disabled{opacity:.4;cursor:not-allowed}
+.theme-light .delete-account-dialog{background:#fff;border-color:#e1c5c3}
+.theme-light .delete-account-dialog h2{color:#7b302e}
+.theme-light .delete-account-dialog>p{color:#6e6060}
+.theme-light .delete-account-input{background:#fff;border-color:#e0c7c5;color:#292a31}
