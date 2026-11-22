@@ -263,8 +263,10 @@ export default async function handler(req, res) {
     + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0);
   const imageCount = attachments.filter(file => file.kind === "image").length;
   const inputTokenEstimate = estimateTokens(inputCharacters) + imageCount * 1024;
-  // Only direct OpenRouter selections are free. Wachabe keeps its own customer-facing pricing even when routed through OpenRouter.
-  const freeOpenRouter = requestedProvider === "openrouter";
+  // Bill Yaza/Wachabe against the actual provider/model selected by the administrator.
+  // OpenRouter is pinned to its free router, so that route never incurs a wallet charge.
+  const billingModelKey = provider + "/" + model;
+  const freeOpenRouter = provider === "openrouter" && model === "openrouter/free";
   let pricingMode = "free";
   let inputRate = 0;
   let outputRate = 0;
@@ -276,7 +278,7 @@ export default async function handler(req, res) {
   if (!freeOpenRouter) {
     const { data: pricing, error: pricingError } = await quotaContext.admin.from("model_pricing")
       .select("enabled,pricing_mode,input_rate_per_1k_mwk,output_rate_per_1k_mwk,message_rate_mwk")
-      .eq("model_key", publicModelKey).maybeSingle();
+      .eq("model_key", billingModelKey).maybeSingle();
     if (pricingError) {
       console.error("Yaza model pricing lookup error:", pricingError.message);
       return res.status(503).json({ error: "Model billing is temporarily unavailable. Please try again shortly." });
@@ -301,7 +303,7 @@ export default async function handler(req, res) {
     reserveMinor = Math.ceil(reserveMwk * 100);
     usageId = randomUUID();
     const { data: reserveRows, error: reserveError } = await quotaContext.admin.rpc("reserve_yaza_usage", {
-      p_usage_id: usageId, p_user_id: quotaContext.userId, p_model_key: publicModelKey,
+      p_usage_id: usageId, p_user_id: quotaContext.userId, p_model_key: billingModelKey,
       p_provider: provider, p_model: model, p_pricing_mode: pricingMode,
       p_reserved_minor: reserveMinor, p_input_tokens: Math.ceil(inputTokenEstimate * 1.25),
       p_output_token_reserve: outputTokenReserve, p_input_rate: inputRate,
