@@ -62,6 +62,7 @@ function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("general");
   const [authMode, setAuthMode] = useState("signin");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -797,31 +798,45 @@ function App() {
       </section>
     </div>}
 
-    {settingsOpen && <div className="auth-backdrop settings-backdrop" onClick={() => setSettingsOpen(false)}>
-      <section className="settings-dialog" onClick={event => event.stopPropagation()}>
-        <button className="auth-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button>
-        <div className="settings-title"><div className="auth-mark"><Settings2 size={21}/></div><div><h2>Settings</h2><p>Manage how Yaza AI works for you.</p></div></div>
-        <div className="settings-section">
-          <div className="settings-section-title">GENERAL</div>
-          <div className="settings-row"><div><strong>Language</strong><span>Interface language</span></div><span className="settings-value">English</span></div>
-          <div className="settings-row"><div><strong>Appearance</strong><span>Yaza's current interface theme</span></div><span className="settings-value">Dark</span></div>
-        </div>
-        <div className="settings-section">
-          <div className="settings-section-title">AI PREFERENCES</div>
-          <label className="settings-field"><span>Default AI provider</span><select value={provider} onChange={event => chooseProvider(event.target.value)}>{Object.entries(PROVIDERS).map(([id,item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
-          <label className="settings-field"><span>Default model</span><select value={model} onChange={event => setModel(event.target.value)}>{PROVIDERS[provider].models.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-          <p className="settings-help">Your provider and model choice is saved in this browser and used as the starting selection for new chats.</p>
-        </div>
-        <div className="settings-section">
-          <div className="settings-section-title">PERSONALIZATION</div>
-          <button className="settings-link-row" onClick={() => { setSettingsOpen(false); if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); } else setMemoryOpen(true); }}><div><strong>Manage memories</strong><span>Review, edit, or delete what Yaza remembers</span></div><span> {memories.length} <ChevronDown size={15}/></span></button>
-        </div>
-        <div className="settings-section">
-          <div className="settings-section-title">ACCOUNT & DATA</div>
-          <div className="settings-row"><div><strong>Account</strong><span>{session?.user?.email || "Not signed in"}</span></div>{session ? <button className="settings-text-button" onClick={() => { setSettingsOpen(false); signOut(); }}>Sign out</button> : <button className="settings-text-button" onClick={() => { setSettingsOpen(false); setAuthMode("signin"); setAuthOpen(true); }}>Sign in</button>}</div>
-          <p className="settings-help">When signed in, your conversations and saved memories are synced to your Yaza account. Attachments are stored privately.</p>
-        </div>
-        <div className="settings-footer"><span>Yaza AI settings</span><button className="auth-submit" onClick={() => setSettingsOpen(false)}>Done</button></div>
+    {settingsOpen && <div className="settings-page-backdrop" onClick={() => setSettingsOpen(false)}>
+      <section className="settings-page" onClick={event => event.stopPropagation()}>
+        <aside className="settings-sidebar">
+          <div className="settings-sidebar-top"><div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Settings</strong><span>Yaza AI preferences</span></div></div><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
+          <nav className="settings-nav" aria-label="Settings sections">
+            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => setSettingsTab(id)}>{label}</button>)}
+          </nav>
+          <div className="settings-sidebar-bottom"><span>Yaza AI</span><span>Settings</span></div>
+        </aside>
+        <main className="settings-content">
+          <div className="settings-mobile-heading"><strong>Settings</strong><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
+          {settingsTab==="general" && <section className="settings-panel-section"><h2>General</h2><p className="settings-panel-intro">Choose how Yaza AI appears and communicates.</p>
+            <div className="settings-option"><div><strong>Language</strong><span>The language used across the Yaza interface.</span></div><span className="settings-chip">English</span></div>
+            <div className="settings-option"><div><strong>Appearance</strong><span>Yaza currently uses its dark interface theme.</span></div><span className="settings-chip">Dark</span></div>
+          </section>}
+          {settingsTab==="ai" && <section className="settings-panel-section"><h2>AI preferences</h2><p className="settings-panel-intro">Choose the provider and model Yaza starts with when you chat.</p>
+            <label className="settings-field"><span>Default AI provider</span><select value={provider} onChange={event => chooseProvider(event.target.value)}>{Object.entries(PROVIDERS).map(([id,item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
+            <label className="settings-field"><span>Default model</span><select value={model} onChange={event => setModel(event.target.value)}>{(PROVIDERS[provider]?.models || []).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+            <div className="settings-info-note">Your provider and model selection is saved in this browser. Provider availability depends on the API keys and credits configured by Yaza.</div>
+          </section>}
+          {settingsTab==="personalization" && <section className="settings-panel-section"><h2>Personalization</h2><p className="settings-panel-intro">Manage information that helps Yaza tailor future conversations.</p>
+            <button className="settings-action-card" onClick={() => { setSettingsOpen(false); if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); } else setMemoryOpen(true); }}><div><strong>Saved memories</strong><span>Review, add, edit or delete memories used in future chats.</span></div><span className="settings-chip">{memories.length} saved</span></button>
+          </section>}
+          {settingsTab==="voice" && <section className="settings-panel-section"><h2>Voice</h2><p className="settings-panel-intro">Use your browser's built-in speech features with Yaza.</p>
+            <div className="settings-option"><div><strong>Voice input</strong><span>Speak your prompt using the microphone control in the composer. Browser microphone permission is required.</span></div><span className="settings-chip">Composer control</span></div>
+            <div className="settings-option"><div><strong>Read aloud</strong><span>Play an assistant response using the Read aloud control beneath a reply.</span></div><span className="settings-chip">Per response</span></div>
+            <div className="settings-info-note">Voice availability and voices depend on your browser and device. Chrome generally provides the best support.</div>
+          </section>}
+          {settingsTab==="data" && <section className="settings-panel-section"><h2>Data controls</h2><p className="settings-panel-intro">Understand where your conversations and attachments are kept.</p>
+            <div className="settings-option"><div><strong>Conversation history</strong><span>Signed-in conversations are synced with your Yaza account. Local history may also be available in this browser.</span></div><span className="settings-chip">{session ? "Account sync" : "This browser"}</span></div>
+            <div className="settings-option"><div><strong>File attachments</strong><span>Uploaded files are stored in private account storage and opened using temporary links.</span></div><span className="settings-chip">Private</span></div>
+            <div className="settings-info-note">Chat deletion and account-wide data export controls are not available here yet. We will add clear confirmation and privacy safeguards before enabling permanent deletion.</div>
+          </section>}
+          {settingsTab==="account" && <section className="settings-panel-section"><h2>Account</h2><p className="settings-panel-intro">Manage your Yaza AI sign-in.</p>
+            <div className="settings-option"><div><strong>Email address</strong><span>{session?.user?.email || "You are using Yaza as a guest."}</span></div><span className="settings-chip">{session ? "Signed in" : "Guest"}</span></div>
+            {session ? <button className="settings-danger-action" onClick={() => { setSettingsOpen(false); signOut(); }}><LogOut size={16}/> Sign out</button> : <button className="settings-primary-action" onClick={() => { setSettingsOpen(false); setAuthMode("signin"); setAuthOpen(true); }}><LogIn size={16}/> Sign in or create an account</button>}
+          </section>}
+          <div className="settings-content-footer"><span>Changes to AI provider and model apply immediately.</span><button onClick={() => setSettingsOpen(false)}>Done</button></div>
+        </main>
       </section>
     </div>}
 
