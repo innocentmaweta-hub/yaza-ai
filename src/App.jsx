@@ -170,6 +170,8 @@ function App() {
   const [deleteAccountPhrase, setDeleteAccountPhrase] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editDraft, setEditDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const [sending, setSending] = useState(false);
@@ -721,7 +723,7 @@ function App() {
     else window.location.href = data.signedUrl;
   }
 
-  async function sendMessage(text = prompt) {
+  async function sendMessage(text = prompt, replaceMessageId = null) {
     const content = text.trim();
     if ((!content && !attachments.length) || sending) return;
     if (!session?.user) { setNotice("Sign in to use Yaza AI. Paid model access requires a wallet."); setAuthMode("signin"); setAuthOpen(true); return; }
@@ -734,7 +736,7 @@ function App() {
     let chat = activeChat;
     if (!chat) { chat = makeChat(); setChats([chat]); setActiveId(chat.id); }
     const chatMode = validChatMode(chat.mode);
-    const userMessageId = crypto.randomUUID();
+    const userMessageId = replaceMessageId || crypto.randomUUID();
     const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, mode: chatMode, streaming: true };
     setPrompt("");
     setAttachments([]);
@@ -770,12 +772,21 @@ function App() {
         }
         savedAttachments.push({ id: file.id, name: file.name, type: file.type, kind: file.kind, path });
       }
-      userMessage = { id: userMessageId, role: "user", content: messageContent, attachments: savedAttachments };
-      const nextMessages = [...chat.messages, userMessage];
+      const previousUserMessage = replaceMessageId ? chat.messages.find(message => message.id === replaceMessageId && message.role === "user") : null;
+      if (replaceMessageId && !previousUserMessage) throw new Error("That prompt could not be found. Please refresh and try again.");
+      userMessage = previousUserMessage
+        ? { ...previousUserMessage, content: messageContent }
+        : { id: userMessageId, role: "user", content: messageContent, attachments: savedAttachments };
+      const editIndex = replaceMessageId ? chat.messages.findIndex(message => message.id === replaceMessageId) : -1;
+      const nextMessages = replaceMessageId
+        ? [...chat.messages.slice(0, editIndex), userMessage, assistantMessage]
+        : [...chat.messages, userMessage, assistantMessage];
       updateChat(chat.id, c => ({
         ...c,
         title: c.messages.length ? c.title : messageContent.slice(0, 42) + (messageContent.length > 42 ? "…" : ""),
-        messages: [...c.messages, userMessage, assistantMessage]
+        messages: replaceMessageId
+          ? [...c.messages.slice(0, c.messages.findIndex(message => message.id === replaceMessageId)), userMessage, assistantMessage]
+          : [...c.messages, userMessage, assistantMessage]
       }));
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -1056,7 +1067,23 @@ function App() {
       setNotice(error.message || "Could not create your image. Please try again.");
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
-  function handleSubmit(e) { e.preventDefault(); if (imageMode) generateImage(); else sendMessage(); }
+  function startEditingMessage(message) {
+    setEditingMessageId(message.id);
+    setEditDraft(message.content || "");
+  }
+  function cancelEditingMessage() { setEditingMessageId(null); setEditDraft(""); }
+  function saveEditedMessage() {
+    if (!editDraft.trim() || sending || !editingMessageId) return;
+    const messageId = editingMessageId;
+    const editedText = editDraft;
+    cancelEditingMessage();
+    sendMessage(editedText, messageId);
+  }
+  function copyMessage(content) {
+    if (!navigator.clipboard?.writeText) { setNotice("Copy is not available in this browser."); return; }
+    navigator.clipboard.writeText(content).then(() => setNotice("Copied to clipboard.")).catch(() => setNotice("Could not copy this message. Please check browser clipboard permissions."));
+  }
+  function handleSubmit(e) { e.preventDefault(); if (editingMessageId) saveEditedMessage(); else if (imageMode) generateImage(); else sendMessage(); }
   async function permanentlyDeleteAccount() {
     if (!session?.access_token || deleteAccountPhrase !== "DELETE MY ACCOUNT" || deletingAccount) return;
     setDeletingAccount(true); setNotice("");
@@ -1198,7 +1225,7 @@ function App() {
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
-            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.content ? renderMarkdown(m.content, code => navigator.clipboard?.writeText(code)) : (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => toggleSpeak(m)} title={!readAloudEnabled ? "Read aloud is disabled in Settings" : speakingMessageId === m.id ? "Stop reading" : "Read response aloud"} aria-label={speakingMessageId === m.id ? "Stop reading response" : "Read response aloud"} disabled={!readAloudEnabled} className={speakingMessageId === m.id ? "speaking-control" : ""}>{speakingMessageId === m.id ? <MicOff size={13}/> : <AudioLines size={13}/>} {speakingMessageId === m.id ? "Stop" : "Read aloud"}</button><button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
+            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.role === "user" && editingMessageId === m.id ? <div className="prompt-edit-panel"><textarea className="prompt-edit-input" value={editDraft} onChange={event => setEditDraft(event.target.value)} rows={Math.min(7, Math.max(2, editDraft.split("\n").length))} autoFocus onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") saveEditedMessage(); if (event.key === "Escape") cancelEditingMessage(); }}/><div className="prompt-edit-actions"><button type="button" onClick={cancelEditingMessage}>Cancel</button><button type="button" className="prompt-edit-save" onClick={saveEditedMessage} disabled={!editDraft.trim() || sending}><Check size={14}/> Save & resend</button></div></div> : m.content ? renderMarkdown(m.content, code => copyMessage(code)) : (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "user" && !m.streaming && <div className="message-meta user-message-actions"><button type="button" onClick={() => copyMessage(m.content)} title="Copy prompt"><Copy size={13}/> Copy</button><button type="button" onClick={() => startEditingMessage(m)} title="Edit and resend prompt" disabled={sending || !!editingMessageId}><Pencil size={13}/> Edit</button></div>}{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => toggleSpeak(m)} title={!readAloudEnabled ? "Read aloud is disabled in Settings" : speakingMessageId === m.id ? "Stop reading" : "Read response aloud"} aria-label={speakingMessageId === m.id ? "Stop reading response" : "Read response aloud"} disabled={!readAloudEnabled} className={speakingMessageId === m.id ? "speaking-control" : ""}>{speakingMessageId === m.id ? <MicOff size={13}/> : <AudioLines size={13}/>} {speakingMessageId === m.id ? "Stop" : "Read aloud"}</button><button onClick={() => copyMessage(m.content)} title="Copy response"><Copy size={13}/> Copy</button></div>}</div>
           </article>)}
           <div ref={endRef}/>
         </div>}
