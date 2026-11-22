@@ -736,3 +736,9 @@
 .theme-light *::-webkit-scrollbar-track{
   background:transparent;
 }
+
+
+/* Shared brand logo slot. Add public/brand-logo.svg to replace the Sparkles fallback. */
+.brand-mark,.auth-mark{position:relative;overflow:hidden}
+.brand-mark>img,.auth-mark>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px}
+.brand-mark-fallback{display:none;width:100%;height:100%;place-items:center}
