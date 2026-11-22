@@ -78,8 +78,6 @@ export default async function handler(req, res) {
     }
     const item = Array.isArray(data.data) ? data.data.find(image => typeof image.b64_json === "string" && image.b64_json.length) : null;
     if (!item) { await release("Image provider returned no image"); return res.status(502).json({ error: "The image provider returned no image. Please try again." }); }
-    const { error: settleError } = await admin.rpc("settle_yaza_usage",{p_usage_id:usageId,p_actual_minor:reserveMinor});
-    if (settleError) console.error("Yaza image wallet settlement error:",settleError.message);
     const mediaType = /^image\/(png|jpeg|webp)$/i.test(item.media_type || "") ? item.media_type : "image/png";
     const imageBuffer = Buffer.from(item.b64_json,"base64");
     if (imageBuffer.length > 10 * 1024 * 1024) { await release("Generated image exceeded the storage limit"); return res.status(413).json({ error:"The generated image is too large to save. Try a simpler image prompt." }); }
