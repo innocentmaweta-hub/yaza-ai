@@ -246,3 +246,25 @@
 .theme-light .delete-account-dialog h2{color:#7b302e}
 .theme-light .delete-account-dialog>p{color:#6e6060}
 .theme-light .delete-account-input{background:#fff;border-color:#e0c7c5;color:#292a31}
+
+.theme-light .main-area{background:#f5f5f7}
+.theme-light .topbar{background:#f5f5f7;border-color:#e1e2e8}
+.theme-light .model-button,.theme-light .mobile-brand{color:#343640}
+.theme-light .model-name,.theme-light .control-divider{color:#777985}
+.theme-light .welcome h1{color:#262730}
+.theme-light .message-author{color:#383943}
+.theme-light .message-content,.theme-light .message.user .message-content{color:#3f414b}
+.theme-light .message-avatar{background:#f4e8e3;border-color:#ead5cc;color:#a85f48}
+.theme-light .user-avatar{background:#e5e6ec;color:#4e5060}
+.theme-light .message-meta button{color:#737581}
+.theme-light .dropdown{background:#fff;border-color:#dedfe5}
+.theme-light .dropdown button{color:#3c3e48}
+.theme-light .dropdown button:hover{background:#f1f1f5}
+.theme-light .new-chat-btn{background:#fff;border-color:#dedfe5;color:#343640}
+.theme-light .plan-card{background:#fff;border-color:#dedfe5}
+.theme-light .plan-card strong{color:#33343c}
+.theme-light .profile-copy strong{color:#33343c}
+.theme-light .suggestion-card small{color:#6d707b}
+.theme-light .suggestion-icon{background:#f8efec;border-color:#eadbd4}
+.theme-light .composer{box-shadow:0 8px 28px #34364a12}
+.theme-light .notice{background:#fff7f4;border-color:#e7c9bb;color:#89533f}
