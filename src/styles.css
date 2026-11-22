@@ -405,3 +405,20 @@
 .usage-user-table{overflow-x:auto}
 .usage-user-table .admin-table-row{min-width:600px;grid-template-columns:1.4fr .55fr 1fr .9fr}
 .usage-user-table .admin-table-row>*:last-child{text-align:right}
+
+
+/* Yaza AI provider and central Wachabe model controls */
+.provider-dot.yaza{background:linear-gradient(135deg,#efaa78,#c96b70)}
+.admin-model-config{display:grid;gap:13px;padding:16px;border:1px solid #353640;border-radius:12px;background:#1d1e24}
+.admin-model-config-copy{display:grid;gap:5px}
+.admin-model-config-copy strong{font-size:14px;color:#f0eff3}
+.admin-model-config-copy span,.admin-model-config label>span{font-size:11px;line-height:1.55;color:#92939e}
+.admin-model-config label{display:grid;gap:6px}
+.admin-model-config select{width:100%;height:38px;padding:0 10px;border:1px solid #3b3c46;border-radius:8px;background:#25262d;color:#e8e7ed;font-size:12px}
+.admin-model-config-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.admin-model-config-footer>span{font-size:10px;color:#92939e}
+.admin-model-config .settings-primary-action{margin:0}
+.theme-light .admin-model-config{background:#fff;border-color:#dedfe5}
+.theme-light .admin-model-config-copy strong{color:#292a32}
+.theme-light .admin-model-config select{background:#fff;border-color:#d9dae1;color:#33343c}
+@media(max-width:600px){.admin-model-config{padding:13px}.admin-model-config-footer{align-items:stretch;flex-direction:column}.admin-model-config-footer .settings-primary-action{width:100%;justify-content:center}}
