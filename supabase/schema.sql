@@ -36,6 +36,25 @@ create policy "Users manage messages in their conversations" on public.messages
 grant select, insert, update, delete on public.conversations to authenticated;
 grant select, insert, update, delete on public.messages to authenticated;
 
+-- Revocable, unguessable public links for read-only conversation sharing.
+create table if not exists public.conversation_shares (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+create index if not exists conversation_shares_owner_conversation_idx
+  on public.conversation_shares(user_id, conversation_id);
+alter table public.conversation_shares enable row level security;
+drop policy if exists "Users manage their own conversation shares" on public.conversation_shares;
+create policy "Users manage their own conversation shares" on public.conversation_shares
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+grant select, insert, update, delete on public.conversation_shares to authenticated;
+
 alter table public.messages add column if not exists attachments jsonb not null default '[]'::jsonb;
 
 -- Private permanent storage for each signed-in user's chat attachments.
@@ -99,3 +118,23 @@ create policy "Users manage their own preferences" on public.user_preferences
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 grant select, insert, update, delete on public.user_preferences to authenticated;
+
+
+-- Revocable, unguessable public links for read-only conversation sharing.
+create table if not exists public.conversation_shares (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+create index if not exists conversation_shares_owner_conversation_idx
+  on public.conversation_shares(user_id, conversation_id);
+alter table public.conversation_shares enable row level security;
+drop policy if exists "Users manage their own conversation shares" on public.conversation_shares;
+create policy "Users manage their own conversation shares" on public.conversation_shares
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+grant select, insert, update, delete on public.conversation_shares to authenticated;
