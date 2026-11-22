@@ -212,10 +212,10 @@ function App() {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\\n\\n");
+        const events = buffer.split("\n\n");
         buffer = events.pop() || "";
         for (const event of events) {
-          const line = event.split("\\n").find(part => part.startsWith("data: "));
+          const line = event.split("\n").find(part => part.startsWith("data: "));
           if (!line) continue;
           const payload = JSON.parse(line.slice(6));
           if (payload.delta) {
