@@ -487,3 +487,23 @@
     padding-left: max(12px, env(safe-area-inset-left));
   }
 }
+
+
+/* Admin Center uses the existing Settings layout and visual language. */
+.admin-page-backdrop{z-index:125}
+.admin-page .settings-panel-section{max-width:720px}
+.admin-content .admin-section-title{margin-top:24px}
+.admin-content .admin-stat-grid{margin:18px 0}
+.admin-content .admin-model-config{margin-top:12px}
+.admin-content .admin-pricing-list{display:grid;gap:12px}
+.admin-content .admin-table{margin-top:14px;overflow-x:auto}
+.admin-content .admin-users{margin-top:14px}
+.admin-content .admin-footnote{line-height:1.6}
+.admin-content .admin-section-title:first-child{margin-top:12px}
+@media(max-width:640px){
+ .admin-page .settings-content{padding-top:17px}
+ .admin-page .settings-panel-section{max-width:none}
+ .admin-page .admin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .admin-page .admin-table-row{min-width:480px}
+ .admin-page .usage-user-table .admin-table-row{min-width:680px}
+}
