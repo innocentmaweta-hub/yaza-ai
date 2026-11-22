@@ -124,7 +124,11 @@ function App() {
     setAuthBusy(true); setNotice("");
     try {
       const result = authMode === "signup"
-        ? await supabase.auth.signUp({ email: authEmail.trim(), password: authPassword })
+        ? await supabase.auth.signUp({
+            email: authEmail.trim(),
+            password: authPassword,
+            options: { emailRedirectTo: "https://yaza-ai.vercel.app/" }
+          })
         : await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
       if (result.error) throw result.error;
       if (authMode === "signup" && !result.data.session) setNotice("Check your email to confirm your Yaza AI account, then sign in.");
