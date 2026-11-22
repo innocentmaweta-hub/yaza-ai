@@ -68,13 +68,13 @@ const DEFAULT_PREFERENCES = { theme: "dark", voiceInputEnabled: true, readAloudE
 function readProviderSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROVIDER_SETTINGS) || "{}");
-    const provider = PROVIDERS[saved.provider] ? saved.provider : "openai";
+    const provider = PROVIDERS[saved.provider] ? saved.provider : "yaza";
     const model = PROVIDERS[provider].models.some(item => item.id === saved.model)
       ? saved.model
       : PROVIDERS[provider].models[0].id;
     return { provider, model };
   } catch {
-    return { provider: "openai", model: PROVIDERS.openai.models[0].id };
+    return { provider: "yaza", model: PROVIDERS.yaza.models[0].id };
   }
 }
 
