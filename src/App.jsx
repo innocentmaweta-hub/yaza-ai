@@ -300,14 +300,14 @@ function App() {
       if (webSearchEnabled) {
         const searchResponse = await fetch("/api/search", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: content })
+          body: JSON.stringify({ query: content || "information relevant to the attached file" })
         });
         const searchData = await searchResponse.json().catch(() => ({}));
         if (!searchResponse.ok) throw new Error(searchData.error || "Web search failed.");
         webSources = Array.isArray(searchData.results) ? searchData.results : [];
         if (webSources.length) {
-          webContext = "\\n\\nUse the following live web search results to answer the user's request. Cite relevant claims with [1], [2], etc. Do not invent facts beyond these results.\\n\\n" + webSources.map((item, index) => `[${index + 1}] ${item.title}\\nURL: ${item.url}\\nSummary: ${item.content}`).join("\\n\\n");
-        } else webContext = "\\n\\nThe web search returned no results. Say so clearly and do not pretend you searched successfully.";
+          webContext = "\n\nUse the following live web search results to answer the user's request. Cite relevant claims with [1], [2], etc. Do not invent facts beyond these results.\n\n" + webSources.map((item, index) => `[${index + 1}] ${item.title}\nURL: ${item.url}\nSummary: ${item.content}`).join("\n\n");
+        } else webContext = "\n\nThe web search returned no results. Say so clearly and do not pretend you searched successfully.";
       }
       const savedAttachments = [];
       for (const file of pendingAttachments) {
@@ -372,7 +372,7 @@ function App() {
         if (payload.done) completed = true;
       }
       if (answer) {
-        const sourceList = webSearchEnabled && webSources.length ? "\\n\\nSources\\n" + webSources.map((item, index) => `[${index + 1}] ${item.title} — ${item.url}`).join("\\n") : "";
+        const sourceList = webSearchEnabled && webSources.length ? "\n\nSources\n" + webSources.map((item, index) => `[${index + 1}] ${item.title} — ${item.url}`).join("\n") : "";
         answer += sourceList;
         updateChat(chat.id, c => ({ ...c, messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer, provider, model, streaming: false } : m) }));
       } else {
