@@ -7,7 +7,9 @@ const PROVIDERS = {
   openai: { key: "OPENAI_API_KEY", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" },
   gemini: { key: "GEMINI_API_KEY", model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
   openrouter: { key: "OPENROUTER_API_KEY", model: process.env.OPENROUTER_MODEL || "openrouter/free" },
-  kimi: { key: "KIMI_API_KEY", model: process.env.KIMI_MODEL || "moonshot-v1-8k" }
+  kimi: { key: "KIMI_API_KEY", model: process.env.KIMI_MODEL || "moonshot-v1-8k" },
+  claude: { key: "ANTHROPIC_API_KEY", model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5" },
+  deepseek: { key: "DEEPSEEK_API_KEY", model: process.env.DEEPSEEK_MODEL || "deepseek-flash" }
 };
 
 const ALLOWED_MODELS = {
@@ -15,6 +17,8 @@ const ALLOWED_MODELS = {
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
   openrouter: ["openrouter/free"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+  claude: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
+  deepseek: ["deepseek-flash", "deepseek-v4-pro"],
   yaza: ["wachabe"]
 };
 
@@ -26,17 +30,67 @@ function cleanMessages(messages) {
   ).map(m => ({ role: m.role, content: m.content.slice(0, 20000) }));
 }
 
-function providerError(error) {
-  console.error("Yaza AI provider error:", { status: error?.status, message: error?.message || error });
+function providerError(error, provider = "AI") {
+  console.error("Yaza AI provider error:", { provider, status: error?.status, message: error?.message || error });
   const status = Number(error?.status || error?.code);
-  if (status === 401) return "OpenRouter rejected the API key. Check that OPENROUTER_API_KEY is correct and active.";
-  if (status === 402) return "OpenRouter has insufficient credits for this request. Check your Credits page or choose a free model.";
-  if (status === 403) return "OpenRouter denied this request. Check your account restrictions, model permissions, or content settings.";
-  if (status === 404) return "OpenRouter could not find this model or an available provider. Choose a current model from the model list.";
+  const label = ({ openrouter: "OpenRouter", openai: "OpenAI", gemini: "Gemini", kimi: "Kimi", claude: "Claude", deepseek: "DeepSeek" })[provider] || "AI provider";
+  if (status === 401) return `${label} rejected the API key. Check the ${provider === "claude" ? "ANTHROPIC_API_KEY" : provider === "deepseek" ? "DEEPSEEK_API_KEY" : provider.toUpperCase() + "_API_KEY"} setting.`;
+  if (status === 402) return `${label} reports insufficient account credits. Check the provider account balance.`;
+  if (status === 403) return `${label} denied this request. Check your account restrictions or model permissions.`;
+  if (status === 404) return `${label} could not find this model. Check the selected model and API access.`;
   if (status === 408 || status === 504) return "The model took too long to respond. Please try again.";
-  if (status === 429) return "OpenRouter is rate-limiting requests. Please wait and try again.";
-  if (status === 502 || status === 503) return "The selected model provider is temporarily unavailable. Try another model or try again shortly.";
-  return "Yaza AI could not reach that model. Check the provider, model name, and API access, then try again.";
+  if (status === 429) return `${label} is rate-limiting requests. Please wait and try again.`;
+  if (status === 502 || status === 503) return `${label} is temporarily unavailable. Try again shortly.`;
+  return `Yaza AI could not reach ${label}. Check the provider key, model name, and API access, then try again.`;
+}
+
+
+async function* streamClaudeResponse({ apiKey, model, messages, systemInstruction }) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({ model, max_tokens: 4096, system: systemInstruction, messages, stream: true })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    const error = new Error(detail.slice(0, 1000) || "Claude API request failed.");
+    error.status = response.status;
+    throw error;
+  }
+  if (!response.body) throw new Error("Claude returned an empty response stream.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const parseEvent = function* (block) {
+    const data = block.split(/\\r?\\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\\n");
+    if (!data || data === "[DONE]") return;
+    let payload;
+    try { payload = JSON.parse(data); } catch { return; }
+    if (payload.type === "error") {
+      const error = new Error(payload.error?.message || "Claude returned a streaming error.");
+      error.status = payload.error?.type === "overloaded_error" ? 503 : 502;
+      throw error;
+    }
+    if (payload.type === "message_start" && Number.isFinite(payload.message?.usage?.input_tokens)) {
+      yield { usage: { prompt_tokens: payload.message.usage.input_tokens } };
+    } else if (payload.type === "content_block_delta" && payload.delta?.type === "text_delta" && payload.delta.text) {
+      yield { choices: [{ delta: { content: payload.delta.text } }] };
+    } else if (payload.type === "message_delta" && Number.isFinite(payload.usage?.output_tokens)) {
+      yield { usage: { completion_tokens: payload.usage.output_tokens } };
+    }
+  };
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split(/\\r?\\n\\r?\\n/);
+      buffer = blocks.pop() || "";
+      for (const block of blocks) yield* parseEvent(block);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) yield* parseEvent(buffer);
+  } finally { reader.releaseLock(); }
 }
 
 function sendEvent(res, payload) {
@@ -317,7 +371,20 @@ export default async function handler(req, res) {
   try {
     let stream;
     let client;
-    if (provider === "gemini") {
+    if (provider === "claude") {
+      const claudeMessages = messages.map((message, index) => {
+        if (index !== messages.length - 1 || !attachments.length) return { role: message.role, content: message.content };
+        const content = [{ type: "text", text: message.content || "Please review the attached files." }];
+        for (const file of attachments) {
+          if (file.kind === "image") {
+            const match = file.data.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) content.push({ type: "image", source: { type: "base64", media_type: match[1] === "image/jpg" ? "image/jpeg" : match[1], data: match[2] } });
+          } else if (file.kind === "text") content.push({ type: "text", text: `\\n\\n--- Attached file: ${file.name} ---\\n${file.text}\\n--- End of ${file.name} ---` });
+        }
+        return { role: "user", content };
+      });
+      stream = streamClaudeResponse({ apiKey, model, messages: claudeMessages, systemInstruction });
+    } else if (provider === "gemini") {
       const ai = new GoogleGenAI({ apiKey });
       const history = messages.slice(0, -1).map(m => ({
         role: m.role === "assistant" ? "model" : "user",
@@ -349,6 +416,7 @@ export default async function handler(req, res) {
         };
       }
       if (provider === "kimi") options.baseURL = "https://api.moonshot.ai/v1";
+      if (provider === "deepseek") options.baseURL = "https://api.deepseek.com";
       client = new OpenAI(options);
       const providerMessages = messages.map((message, index) => {
         if (index !== messages.length - 1 || !attachments.length) return message;
@@ -409,7 +477,7 @@ export default async function handler(req, res) {
     return res.end();
   } catch (error) {
     if (quotaContext) await saveUsage("failed");
-    const message = providerError(error);
+    const message = providerError(error, provider);
     if (res.headersSent) {
       sendEvent(res, { error: message });
       return res.end();
