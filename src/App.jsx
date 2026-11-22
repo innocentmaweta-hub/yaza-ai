@@ -187,8 +187,8 @@ function App() {
     const files = Array.from(fileList || []);
     if (!files.length) return;
     const supported = files.filter(file =>
-      file.type.startsWith("image/") ||
-      /\\.(txt|md|csv|json|xml|html|css|js|jsx|ts|tsx|py|java|c|cpp|sql|log)$/i.test(file.name)
+      /^image\/(png|jpeg|jpg|webp|gif)$/i.test(file.type) ||
+      /\.(txt|md|csv|json|xml|html|css|js|jsx|ts|tsx|py|java|c|cpp|sql|log)$/i.test(file.name)
     );
     if (supported.length !== files.length) setNotice("Supported files: images, TXT, MD, CSV, JSON, XML, HTML, CSS, JS/TS, Python, Java, C/C++, SQL and LOG.");
     const remaining = Math.max(0, 5 - attachments.length);
@@ -196,7 +196,7 @@ function App() {
     if (supported.length > remaining) setNotice("You can attach up to 5 files per message.");
     try {
       const loaded = await Promise.all(chosen.map(async file => {
-        if (file.size > 4 * 1024 * 1024) throw new Error(`${file.name} is larger than 4 MB. Please choose a smaller file.`);
+        if (file.size > 2.5 * 1024 * 1024) throw new Error(`${file.name} is larger than 2.5 MB. Please choose a smaller file.`);
         if (file.type.startsWith("image/")) {
           return { id: crypto.randomUUID(), name: file.name, type: file.type, kind: "image", data: await readFileAsDataUrl(file) };
         }
@@ -220,7 +220,7 @@ function App() {
     const nextMessages = [...chat.messages, userMessage];
     updateChat(chat.id, c => ({
       ...c,
-      title: c.messages.length ? c.title : content.slice(0, 42) + (content.length > 42 ? "…" : ""),
+      title: c.messages.length ? c.title : messageContent.slice(0, 42) + (messageContent.length > 42 ? "…" : ""),
       messages: [...c.messages, userMessage, assistantMessage]
     }));
     setPrompt("");
