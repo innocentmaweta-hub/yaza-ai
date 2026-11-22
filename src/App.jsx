@@ -4,7 +4,7 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
 import {
-  Archive, ArchiveRestore, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, Copy, CreditCard, LogIn, LogOut, Mic, MicOff,
+  Archive, ArchiveRestore, ArrowDown, ArrowUp, ArrowUpRight, AudioLines, Check, ChevronDown, Code2, Compass, Copy, CreditCard, LogIn, LogOut, Mic, MicOff,
   FileText, Globe2, ImagePlus, Link2, Menu, MessageSquare, MoreHorizontal, Pencil,
   PanelLeftClose, Plus, Search, Settings2, Share2, Sparkles, SquarePen, Trash2, UserRoundPlus,
   X, Zap
