@@ -4,7 +4,7 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
 import {
-  ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass,
+  ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, Mic, MicOff,
   FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal,
   PanelLeftClose, Plus, Search, Settings2, Sparkles, SquarePen, Trash2,
   X, Zap
@@ -52,6 +52,9 @@ function App() {
   const [modelMenu, setModelMenu] = useState(false);
   const [search, setSearch] = useState("");
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const voiceBasePromptRef = useRef("");
   const [notice, setNotice] = useState("");
   const [session, setSession] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -68,6 +71,7 @@ function App() {
   const isNew = messages.length === 0;
 
   useEffect(() => { localStorage.setItem(STORAGE, JSON.stringify(chats)); }, [chats]);
+  useEffect(() => () => { try { recognitionRef.current?.stop(); } catch {} }, []);
   useEffect(() => {
     localStorage.setItem(PROVIDER_SETTINGS, JSON.stringify({ provider, model }));
   }, [provider, model]);
@@ -396,6 +400,54 @@ function App() {
     setChats(next);
     if (activeId === id) setActiveId(next[0].id);
   }
+  function toggleVoiceInput() {
+    if (voiceListening) {
+      try { recognitionRef.current?.stop(); } catch {}
+      setVoiceListening(false);
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setNotice("Voice input is not supported in this browser. Try the latest Google Chrome or Microsoft Edge.");
+      return;
+    }
+    if (sending) return;
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = navigator.language || "en-US";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      voiceBasePromptRef.current = prompt.trim() ? prompt.trim() + " " : "";
+      recognition.onresult = event => {
+        let transcript = "";
+        for (let index = 0; index < event.results.length; index++) {
+          transcript += event.results[index][0].transcript;
+        }
+        setPrompt(voiceBasePromptRef.current + transcript.trim());
+      };
+      recognition.onerror = event => {
+        setVoiceListening(false);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setNotice("Microphone access was blocked. Allow microphone permission in your browser and try again.");
+        } else if (event.error !== "no-speech" && event.error !== "aborted") {
+          setNotice("Voice input stopped. Please try again.");
+        }
+      };
+      recognition.onend = () => {
+        setVoiceListening(false);
+        recognitionRef.current = null;
+      };
+      recognitionRef.current = recognition;
+      recognition.start();
+      setVoiceListening(true);
+      setNotice("Listening… speak clearly, then select the microphone again to stop.");
+    } catch (error) {
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      setNotice("Could not start the microphone. Check browser permissions and try again.");
+    }
+  }
+
   function handleSubmit(e) { e.preventDefault(); sendMessage(); }
   function handlePromptKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -471,7 +523,7 @@ function App() {
           {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
           <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder="Message Yaza AI..." rows={1} disabled={sending}/>
           <div className="composer-bottom">
-            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
+            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className={`tool-btn tool-label ${voiceListening ? "tool-active voice-active" : ""}`} onClick={toggleVoiceInput} aria-pressed={voiceListening} title={voiceListening ? "Stop voice input" : "Start voice input"} disabled={sending}><>{voiceListening ? <MicOff size={15}/> : <Mic size={15}/>} <span>{voiceListening ? "Listening" : "Voice"}</span></></button></div>
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
