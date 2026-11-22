@@ -95,28 +95,28 @@ async function prepareQuota(req, provider, model) {
     error.status = 401;
     throw error;
   }
-  const { data, error: authError } = await authClient.auth.getUser(token);
-  if (authError || !data?.user) {
+  const { data: authData, error: authError } = await authClient.auth.getUser(token);
+  if (authError || !authData?.user) {
     const error = new Error("Your session has expired. Sign in again to continue.");
     error.status = 401;
     throw error;
   }
-  const userId = data.user.id;
+  const userId = authData.user.id;
   const identity = "user:" + userId;
   const subjectKey = createHash("sha256").update(process.env.SUPABASE_SERVICE_ROLE_KEY + ":" + identity).digest("hex");
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const limits = quotaSettings();
   const dailyLimit = limits.daily;
-  const { data, error } = await admin.rpc("consume_yaza_quota", {
+  const { data: quotaData, error: quotaError } = await admin.rpc("consume_yaza_quota", {
     p_subject_key: subjectKey,
     p_daily_limit: dailyLimit,
     p_monthly_limit: limits.monthly
   });
-  if (error) {
-    console.error("Yaza quota check error:", error.message);
+  if (quotaError) {
+    console.error("Yaza quota check error:", quotaError.message);
     throw new Error("Yaza usage controls are temporarily unavailable. Please try again shortly.");
   }
-  const quota = Array.isArray(data) ? data[0] : data;
+  const quota = Array.isArray(quotaData) ? quotaData[0] : quotaData;
   if (!quota?.allowed) {
     const error = new Error(`Your Yaza usage limit has been reached (${dailyLimit} requests per day or ${limits.monthly} per month). Please try again after the limit resets.`);
     error.status = 429;
@@ -166,7 +166,10 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(503).json({ error: `${provider} is not configured yet. Add ${config.key} in your deployment environment.` });
 
   const messages = cleanMessages(req.body?.messages);
-  if (Array.isArray(req.body?.attachments) && req.body.attachments.length > 10) {\n    return res.status(400).json({ error: "Attach no more than 10 files or scanned pages at once." });\n  }\n  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+  if (Array.isArray(req.body?.attachments) && req.body.attachments.length > 10) {
+    return res.status(400).json({ error: "Attach no more than 10 files or scanned pages at once." });
+  }
+  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
   if (attachments.filter(file => file?.kind === "image").length > 10) {
     return res.status(400).json({ error: "Too many image pages. Attach fewer scanned pages and try again." });
   }
