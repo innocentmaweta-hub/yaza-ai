@@ -66,3 +66,33 @@
 .memory-empty{padding:18px;border:1px dashed #41424c;border-radius:10px;color:#858691;text-align:center;font-size:11px}
 .memory-footnote{margin-top:17px;color:#777984;font-size:10px;line-height:1.5}
 @media(max-width:520px){.memory-dialog{padding:25px 18px}.memory-dialog h2{font-size:21px}}
+
+
+/* Yaza admin dashboard */
+.admin-nav-btn{margin-top:5px;color:#e7a184}
+.admin-backdrop{z-index:110}
+.admin-dialog{position:relative;width:min(100%,760px);max-height:min(88vh,900px);overflow:auto;padding:30px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:#17191e;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.admin-heading{display:flex;align-items:center;gap:14px;padding-right:38px}
+.admin-heading .auth-mark{flex:0 0 44px;margin:0}
+.admin-heading h2{margin:0 0 5px;color:#f5f3f1;font-size:22px}
+.admin-heading p{margin:0;color:#9b9da6;font-size:12px;line-height:1.5}
+.admin-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:25px 0}
+.admin-stat{display:grid;gap:9px;padding:15px;border:1px solid #34353e;border-radius:12px;background:#202127}
+.admin-stat span{font-size:11px;color:#9698a2}
+.admin-stat strong{font:700 27px Manrope,sans-serif;color:#f2a17e}
+.admin-section-title{margin:24px 0 10px;color:#858792;font-size:9px;font-weight:700;letter-spacing:1.3px}
+.admin-table{overflow:hidden;border:1px solid #34353e;border-radius:10px}
+.admin-table-row{display:grid;grid-template-columns:1fr 1.5fr 75px;gap:10px;padding:11px 13px;border-top:1px solid #303139;color:#c9c9d1;font-size:11px}
+.admin-table-row:first-child{border-top:0}
+.admin-table-row strong{text-align:right;color:#e7a184}
+.admin-table-head{background:#22232a;color:#92949e;font-weight:700}
+.admin-table-head span:last-child{text-align:right}
+.admin-users{display:grid;gap:0;border:1px solid #34353e;border-radius:10px;overflow:hidden}
+.admin-user{display:flex;align-items:center;gap:10px;padding:11px 13px;border-top:1px solid #303139}
+.admin-user:first-child{border-top:0}
+.admin-user>div:last-child{display:grid;gap:4px;min-width:0}
+.admin-user strong{overflow:hidden;text-overflow:ellipsis;color:#dedee4;font-size:11px}
+.admin-user span{color:#858792;font-size:10px}
+.admin-empty,.admin-loading{padding:18px;color:#92949e;font-size:12px;text-align:center}
+.admin-footnote{margin-top:16px;color:#777984;font-size:10px;line-height:1.5}
+@media(max-width:600px){.admin-dialog{padding:22px 16px}.admin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-table-row{grid-template-columns:1fr 1.2fr 55px;padding:10px 8px;font-size:10px}.admin-heading h2{font-size:19px}}
