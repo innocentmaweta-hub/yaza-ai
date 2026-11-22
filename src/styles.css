@@ -695,3 +695,44 @@
 .theme-light .usage-choice-dialog p{color:#77717a}
 .theme-light .usage-choice-fallback{background:#f3f0f1;color:#37343a;border-color:#ded7d8}
 @media(max-width:430px){.usage-choice-dialog{padding:23px 18px}.usage-choice-actions{grid-template-columns:1fr}}
+
+
+/* App-wide scrollbar styling to match the wallet promotion meter */
+:root{
+  scrollbar-width:thin;
+  scrollbar-color:#d8795f #252329;
+}
+*{
+  scrollbar-width:thin;
+  scrollbar-color:#d8795f transparent;
+}
+*::-webkit-scrollbar{
+  width:7px;
+  height:7px;
+}
+*::-webkit-scrollbar-track{
+  background:transparent;
+  border-radius:999px;
+}
+*::-webkit-scrollbar-thumb{
+  min-height:28px;
+  background:linear-gradient(180deg,#d8795f,#efb078);
+  border:2px solid transparent;
+  background-clip:padding-box;
+  border-radius:999px;
+}
+*::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg,#e68a69,#f4bd8b);
+  border:1px solid transparent;
+  background-clip:padding-box;
+}
+*::-webkit-scrollbar-corner{
+  background:transparent;
+}
+.theme-light,
+.theme-light *{
+  scrollbar-color:#d8795f transparent;
+}
+.theme-light *::-webkit-scrollbar-track{
+  background:transparent;
+}
