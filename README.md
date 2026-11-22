@@ -24,4 +24,4 @@ Import this repository into Vercel, use the Vite framework preset, and add the p
 
 Supabase authentication and cloud conversation sync are included. Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel and in .env.local. Run supabase/schema.sql in the Supabase SQL Editor before enabling accounts. Without Supabase configuration, guest/local mode remains available.
 
-Uploads, voice, web search, and image generation are planned follow-on features.
+The application also includes file uploads, voice input and read-aloud, web search, image generation, conversation sharing, account-synced preferences, and usage tracking.
