@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const PROVIDERS = {
   openai: { key: "OPENAI_API_KEY", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" },
@@ -67,6 +67,9 @@ async function recordUsage(admin, details) {
     subject_key: details.subjectKey,
     provider: details.provider,
     model: details.model,
+    public_model_key: details.publicModelKey || null,
+    billed_amount_minor: Number.isFinite(details.billedAmountMinor) ? details.billedAmountMinor : null,
+    billing_status: details.billingStatus || null,
     status: details.status,
     input_characters: details.inputCharacters || 0,
     output_characters: details.outputCharacters || 0,
@@ -87,27 +90,27 @@ async function prepareQuota(req, provider, model) {
   const authClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const authorization = req.headers.authorization || "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  let userId = null;
-  if (token) {
-    const { data, error } = await authClient.auth.getUser(token);
-    if (error || !data?.user) {
-      const error = new Error("Your session has expired. Sign in again to continue.");
-      error.status = 401;
-      throw error;
-    }
-    userId = data.user.id;
+  if (!token) {
+    const error = new Error("Sign in to use Yaza AI. Paid model access requires a wallet.");
+    error.status = 401;
+    throw error;
   }
-  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  const ip = forwarded || req.socket?.remoteAddress || "unknown-guest";
-  const identity = userId ? "user:" + userId : "guest:" + ip;
+  const { data, error: authError } = await authClient.auth.getUser(token);
+  if (authError || !data?.user) {
+    const error = new Error("Your session has expired. Sign in again to continue.");
+    error.status = 401;
+    throw error;
+  }
+  const userId = data.user.id;
+  const identity = "user:" + userId;
   const subjectKey = createHash("sha256").update(process.env.SUPABASE_SERVICE_ROLE_KEY + ":" + identity).digest("hex");
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const limits = quotaSettings();
-  const dailyLimit = userId ? limits.daily : limits.guestDaily;
+  const dailyLimit = limits.daily;
   const { data, error } = await admin.rpc("consume_yaza_quota", {
     p_subject_key: subjectKey,
     p_daily_limit: dailyLimit,
-    p_monthly_limit: userId ? limits.monthly : limits.guestDaily * 30
+    p_monthly_limit: limits.monthly
   });
   if (error) {
     console.error("Yaza quota check error:", error.message);
@@ -115,11 +118,9 @@ async function prepareQuota(req, provider, model) {
   }
   const quota = Array.isArray(data) ? data[0] : data;
   if (!quota?.allowed) {
-    const error = new Error(!userId
-      ? `Guest limit reached (${dailyLimit} requests per day). Sign in for a higher Yaza usage allowance.`
-      : `Your Yaza usage limit has been reached (${dailyLimit} requests per day or ${limits.monthly} per month). Please try again after the limit resets.`);
+    const error = new Error(`Your Yaza usage limit has been reached (${dailyLimit} requests per day or ${limits.monthly} per month). Please try again after the limit resets.`);
     error.status = 429;
-    error.quota = { dailyUsed: quota?.daily_used || dailyLimit, dailyLimit, monthlyUsed: quota?.monthly_used || 0, monthlyLimit: userId ? limits.monthly : limits.guestDaily * 30 };
+    error.quota = { dailyUsed: quota?.daily_used || dailyLimit, dailyLimit, monthlyUsed: quota?.monthly_used || 0, monthlyLimit: limits.monthly };
     throw error;
   }
   return { admin, userId, subjectKey, limits, dailyUsed: quota.daily_used, monthlyUsed: quota.monthly_used };
@@ -136,6 +137,7 @@ export default async function handler(req, res) {
   let provider = requestedProvider;
   let model = typeof req.body?.model === "string" && req.body.model.length < 120
     ? req.body.model : "";
+  const publicModelKey = requestedProvider + "/" + model;
   if (!ALLOWED_MODELS[requestedProvider]?.includes(model)) {
     return res.status(400).json({ error: "That model is not enabled for this provider." });
   }
@@ -200,17 +202,84 @@ export default async function handler(req, res) {
   }
   const inputCharacters = messages.reduce((sum, item) => sum + item.content.length, 0)
     + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0);
+  const imageCount = attachments.filter(file => file.kind === "image").length;
+  const inputTokenEstimate = estimateTokens(inputCharacters) + imageCount * 1024;
+  const { data: pricing, error: pricingError } = await quotaContext.admin.from("model_pricing")
+    .select("enabled,pricing_mode,input_rate_per_1k_mwk,output_rate_per_1k_mwk,message_rate_mwk")
+    .eq("model_key", publicModelKey).maybeSingle();
+  if (pricingError) {
+    console.error("Yaza model pricing lookup error:", pricingError.message);
+    return res.status(503).json({ error: "Model billing is temporarily unavailable. Please try again shortly." });
+  }
+  if (!pricing?.enabled) {
+    return res.status(403).json({ error: "This model is not currently available for paid use. Please choose another model or contact the Yaza administrator." });
+  }
+  const inputRate = Number(pricing.input_rate_per_1k_mwk || 0);
+  const outputRate = Number(pricing.output_rate_per_1k_mwk || 0);
+  const messageRate = Number(pricing.message_rate_mwk || 0);
+  const pricingMode = pricing.pricing_mode;
+  const outputTokenReserve = pricingMode === "tokens" ? 4096 : 0;
+  const reserveMwk = pricingMode === "message"
+    ? messageRate
+    : ((inputTokenEstimate * 1.25 * inputRate) + (outputTokenReserve * outputRate)) / 1000;
+  const reserveMinor = Math.ceil(reserveMwk * 100);
+  const usageId = randomUUID();
+  const { data: reserveRows, error: reserveError } = await quotaContext.admin.rpc("reserve_yaza_usage", {
+    p_usage_id: usageId, p_user_id: quotaContext.userId, p_model_key: publicModelKey,
+    p_provider: provider, p_model: model, p_pricing_mode: pricingMode,
+    p_reserved_minor: reserveMinor, p_input_tokens: Math.ceil(inputTokenEstimate * 1.25),
+    p_output_token_reserve: outputTokenReserve, p_input_rate: inputRate,
+    p_output_rate: outputRate, p_message_rate: messageRate
+  });
+  if (reserveError) {
+    console.error("Yaza wallet reservation error:", reserveError.message);
+    return res.status(503).json({ error: "Wallet billing is temporarily unavailable. Please try again." });
+  }
+  const reservation = Array.isArray(reserveRows) ? reserveRows[0] : reserveRows;
+  if (!reservation?.allowed) {
+    return res.status(402).json({
+      error: "Your wallet balance is too low for this request. Add funds to continue.",
+      walletBalanceMinor: Number(reservation?.balance_minor || 0),
+      requiredMinor: reserveMinor
+    });
+  }
+  const billingContext = { usageId, reservedMinor: reserveMinor, pricingMode, inputRate, outputRate, messageRate, outputTokenReserve };
   let outputCharacters = 0;
   let promptTokens = null;
   let completionTokens = null;
   let reportedCostUsd = null;
+  let billedAmountMinor = null;
+  let billingStatus = "reserved";
   let usageRecorded = false;
   const saveUsage = async status => {
     if (usageRecorded) return;
     usageRecorded = true;
+    if (status === "completed") {
+      const billedInputTokens = Number.isFinite(promptTokens) ? promptTokens : inputTokenEstimate;
+      const billedOutputTokens = Number.isFinite(completionTokens) ? completionTokens : estimateTokens(outputCharacters);
+      const calculatedMinor = pricingMode === "message"
+        ? Math.ceil(messageRate * 100)
+        : Math.ceil(((billedInputTokens * inputRate + billedOutputTokens * outputRate) / 1000) * 100);
+      billedAmountMinor = Math.min(reserveMinor, Math.max(0, calculatedMinor));
+      if (calculatedMinor > reserveMinor) billingStatus = "settled_at_reserve_cap";
+      const { error } = await quotaContext.admin.rpc("settle_yaza_usage", {
+        p_usage_id: usageId, p_actual_minor: billedAmountMinor
+      });
+      if (error) {
+        billingStatus = "settlement_pending";
+        console.error("Yaza wallet settlement error:", error.message);
+      } else if (billingStatus !== "settled_at_reserve_cap") billingStatus = "settled";
+    } else {
+      const { error } = await quotaContext.admin.rpc("release_yaza_usage", {
+        p_usage_id: usageId, p_reason: "AI response failed"
+      });
+      billingStatus = error ? "release_pending" : "released";
+      if (error) console.error("Yaza wallet release error:", error.message);
+    }
     await recordUsage(quotaContext.admin, {
-      userId: quotaContext.userId, subjectKey: quotaContext.subjectKey, provider, model, status,
-      inputCharacters, outputCharacters, promptTokens, completionTokens, reportedCostUsd
+      userId: quotaContext.userId, subjectKey: quotaContext.subjectKey, provider, model,
+      publicModelKey, status, inputCharacters, outputCharacters, promptTokens, completionTokens,
+      reportedCostUsd, billedAmountMinor, billingStatus
     });
   };
   const memories = Array.isArray(req.body?.memories)
@@ -233,7 +302,7 @@ export default async function handler(req, res) {
       const chat = ai.chats.create({
         model,
         history,
-        config: { systemInstruction }
+        config: { systemInstruction, maxOutputTokens: 4096 }
       });
       const lastText = messages[messages.length - 1]?.content || "Please review the attached files.";
       const parts = [{ text: lastText }];
@@ -274,6 +343,7 @@ export default async function handler(req, res) {
         ],
         temperature: 0.7,
         stream: true,
+        ...(provider === "openai" ? { max_completion_tokens: 4096 } : { max_tokens: 4096 }),
         ...(provider === "kimi" ? {} : { stream_options: { include_usage: true } })
       });
     }
