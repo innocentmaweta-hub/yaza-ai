@@ -165,6 +165,9 @@ export default async function handler(req, res) {
 
   const model = typeof req.body?.model === "string" && req.body.model.length < 120
     ? req.body.model : config.model;
+  if (!ALLOWED_MODELS[provider]?.includes(model)) {
+    return res.status(400).json({ error: "That model is not enabled for this provider." });
+  }
   let quotaContext;
   try {
     quotaContext = await prepareQuota(req, provider, model);
@@ -172,8 +175,7 @@ export default async function handler(req, res) {
     return res.status(error.status || 503).json({ error: error.message, quota: error.quota || undefined });
   }
   const inputCharacters = messages.reduce((sum, item) => sum + item.content.length, 0)
-    + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0)
-    + attachments.filter(file => file.kind === "image" && typeof file.data === "string").reduce((sum, file) => sum + Math.ceil(file.data.length * 0.75), 0);
+    + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0);
   let outputCharacters = 0;
   let promptTokens = null;
   let completionTokens = null;
