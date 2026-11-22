@@ -18,4 +18,5 @@ jobs:
           for file in api/*.js lib/*.js; do
             node --check "$file"
           done
+      - run: npm test
       - run: npm run build
