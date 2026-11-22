@@ -218,6 +218,12 @@ export default async function handler(req, res) {
   const outputRate = Number(pricing.output_rate_per_1k_mwk || 0);
   const messageRate = Number(pricing.message_rate_mwk || 0);
   const pricingMode = pricing.pricing_mode;
+  if (!["tokens", "message"].includes(pricingMode)
+    || ![inputRate, outputRate, messageRate].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)
+    || (pricingMode === "tokens" && inputRate + outputRate <= 0)
+    || (pricingMode === "message" && messageRate <= 0)) {
+    return res.status(503).json({ error: "This model's billing configuration is invalid. Please contact the Yaza administrator." });
+  }
   const outputTokenReserve = pricingMode === "tokens" ? 4096 : 0;
   const reserveMwk = pricingMode === "message"
     ? messageRate
