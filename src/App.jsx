@@ -1431,7 +1431,7 @@ function App() {
       </section>
     </div>}
 
-    {settingsOpen && <div className="settings-page-backdrop" onClick={() => setSettingsOpen(false)}>
+    {settingsOpen && <div className="settings-page-backdrop" onClick={() => { setSettingsOpen(false); setSettingsMobileDetail(false); }}>
       <section className={`settings-page${settingsMobileDetail ? " settings-mobile-detail" : " settings-mobile-menu"}`} onClick={event => event.stopPropagation()}>
         <aside className="settings-sidebar">
           <div className="settings-sidebar-top"><div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Settings</strong><span>Yaza AI preferences</span></div></div><button className="settings-close" onClick={() => { setSettingsOpen(false); setSettingsMobileDetail(false); }} aria-label="Close settings"><X size={18}/></button></div>
