@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 export const config = { maxDuration: 60 };
 
@@ -55,6 +56,12 @@ export default async function handler(req, res) {
       const { error } = await admin.storage.from("chat-attachments").remove(files.slice(index, index + 100));
       if (error) throw new Error("Could not remove all uploaded files. Your account was not deleted. " + error.message);
     }
+
+    const subjectKey = createHash("sha256").update(serviceKey + ":user:" + authData.user.id).digest("hex");
+    const { error: usageDeleteError } = await admin.from("usage_events").delete().eq("user_id", authData.user.id);
+    if (usageDeleteError) throw new Error("Could not remove account usage records. Your account was not deleted. " + usageDeleteError.message);
+    const { error: counterDeleteError } = await admin.from("usage_counters").delete().eq("subject_key", subjectKey);
+    if (counterDeleteError) throw new Error("Could not remove account quota records. Your account was not deleted. " + counterDeleteError.message);
 
     const { error: deleteError } = await admin.auth.admin.deleteUser(authData.user.id);
     if (deleteError) throw new Error("Uploaded files were cleared, but account deletion did not finish. Please retry or contact support. " + deleteError.message);
