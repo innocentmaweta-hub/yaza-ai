@@ -1071,6 +1071,12 @@ function App() {
             {adminData.providers.map((item,index) => <div className="admin-table-row" key={index}><span>{item.provider}</span><span>{item.model || "Default"}</span><strong>{item.messages}</strong></div>)}
             {!adminData.providers.length && <div className="admin-empty">No provider usage recorded yet.</div>}
           </div>
+          <div className="admin-section-title">USAGE BY ACCOUNT</div>
+          <div className="admin-table usage-user-table">
+            <div className="admin-table-row admin-table-head"><span>Account</span><span>Requests</span><span>Estimated tokens</span><span>Reported cost (USD)</span></div>
+            {(adminData.usage?.byUser || []).map((item,index) => <div className="admin-table-row" key={index}><span>{item.account}</span><strong>{item.requests}</strong><span>{(item.estimatedInputTokens + item.estimatedOutputTokens).toLocaleString()}</span><strong>${Number(item.reportedCostUsd || 0).toFixed(4)}</strong></div>)}
+            {!(adminData.usage?.byUser || []).length && <div className="admin-empty">No signed-in account usage recorded yet.</div>}
+          </div>
           <div className="admin-section-title">RECENT ACCOUNTS</div>
           <div className="admin-users">
             {adminData.users.map(user => <div className="admin-user" key={user.id}><div className="avatar">{(user.email?.[0] || "Y").toUpperCase()}</div><div><strong>{user.email || "No email"}</strong><span>Joined {user.created_at ? new Date(user.created_at).toLocaleDateString() : "unknown"} · Last sign-in {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : "Never"}</span></div></div>)}
