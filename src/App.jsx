@@ -1239,9 +1239,9 @@ function App() {
             <div className="admin-footnote">The selected provider's API key must be configured in Vercel. The underlying model is hidden from users and is applied server-side.</div>
           </div>
           <div className="admin-section-title">MODEL PRICING & ACCESS</div>
-          <div className="admin-footnote">Set what customers pay for each model. Token pricing uses separate input and output rates per 1,000 tokens; message pricing charges once for each completed response. Prices are in MWK. Wachabe has its own customer price even when you change its underlying provider.</div>
+          <div className="admin-footnote">Set what customers pay for each model. Token pricing uses separate input and output rates per 1,000 tokens; message pricing charges once for each completed response. Prices are in MWK. Wachabe automatically uses the pricing configured for its selected underlying provider and model; free models remain free.</div>
           <div className="admin-pricing-list">
-            {(adminData.modelPricing || []).map(item => {
+            {(adminData.modelPricing || []).filter(item => item.model_key !== "yaza/wachabe").map(item => {
               const draft = pricingDrafts[item.model_key] || item;
               return <div className="admin-model-config admin-pricing-card" key={item.model_key}>
                 <div className="admin-model-config-copy"><strong>{item.label || item.model_key}</strong><span>{item.model_key}</span></div>
