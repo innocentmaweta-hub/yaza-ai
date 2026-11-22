@@ -16,7 +16,8 @@ const PROVIDERS = {
   openai: { label: "OpenAI", models: [{ id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
   gemini: { label: "Gemini", models: [{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }] },
   openrouter: { label: "OpenRouter", models: [{ id: "openrouter/free", label: "Free model (automatic)" }, { id: "~google/gemini-flash-latest", label: "Gemini Flash (latest)" }, { id: "google/gemini-3.7-flash", label: "Gemini 3.7 Flash" }, { id: "openai/gpt-4.1", label: "GPT-4.1" }, { id: "deepseek/deepseek-r1", label: "DeepSeek R1" }, { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" }] },
-  kimi: { label: "Kimi", models: [{ id: "moonshot-v1-8k", label: "Kimi 8K" }, { id: "moonshot-v1-32k", label: "Kimi 32K" }, { id: "moonshot-v1-128k", label: "Kimi 128K" }] }
+  kimi: { label: "Kimi", models: [{ id: "moonshot-v1-8k", label: "Kimi 8K" }, { id: "moonshot-v1-32k", label: "Kimi 32K" }, { id: "moonshot-v1-128k", label: "Kimi 128K" }] },
+  yaza: { label: "Yaza AI", models: [{ id: "wachabe", label: "Wachabe" }] }
 };
 const STORAGE = "yaza-ai-conversations-v1";
 const makeChat = () => ({ id: crypto.randomUUID(), title: "New chat", messages: [], updatedAt: Date.now() });
@@ -163,6 +164,9 @@ function App() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminData, setAdminData] = useState(null);
+  const [wachabeProvider, setWachabeProvider] = useState("openrouter");
+  const [wachabeModel, setWachabeModel] = useState("openrouter/free");
+  const [wachabeSaving, setWachabeSaving] = useState(false);
   const [usageData, setUsageData] = useState(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState("");
@@ -322,8 +326,28 @@ function App() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Could not load the admin dashboard.");
       setAdminData(data);
+      setWachabeProvider(data.wachabe?.provider || "openrouter");
+      setWachabeModel(data.wachabe?.model || "openrouter/free");
     } catch (error) { setNotice(error.message || "Could not load the admin dashboard."); setAdminOpen(false); }
     finally { setAdminBusy(false); }
+  }
+
+  async function saveWachabeModel() {
+    if (!session?.access_token || wachabeSaving) return;
+    setWachabeSaving(true);
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
+        body: JSON.stringify({ action: "set-wachabe-model", provider: wachabeProvider, model: wachabeModel })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not update Wachabe.");
+      setAdminData(current => current ? { ...current, wachabe: data.wachabe } : current);
+      setNotice("Wachabe's model has been updated for all Yaza AI users.");
+    } catch (error) {
+      setNotice(error.message || "Could not update Wachabe's model.");
+    } finally { setWachabeSaving(false); }
   }
 
   async function loadUsageReport() {
@@ -1051,6 +1075,14 @@ function App() {
             <div className="admin-stat"><span>Conversations</span><strong>{adminData.stats.conversations}</strong></div>
             <div className="admin-stat"><span>Messages</span><strong>{adminData.stats.messages}</strong></div>
             <div className="admin-stat"><span>Active providers</span><strong>{adminData.providers.length}</strong></div>
+          </div>
+          <div className="admin-section-title">YAZA AI MODEL</div>
+          <div className="admin-model-config">
+            <div className="admin-model-config-copy"><strong>Wachabe</strong><span>Choose the underlying AI provider and model used whenever anyone selects Yaza AI · Wachabe.</span></div>
+            <label><span>Underlying provider</span><select value={wachabeProvider} onChange={event => { const next = event.target.value; setWachabeProvider(next); setWachabeModel(PROVIDERS[next].models[0].id); }}>{Object.entries(PROVIDERS).filter(([id]) => id !== "yaza").map(([id,item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
+            <label><span>Underlying model</span><select value={wachabeModel} onChange={event => setWachabeModel(event.target.value)}>{(PROVIDERS[wachabeProvider]?.models || []).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+            <div className="admin-model-config-footer"><span>Currently active: {adminData.wachabe?.provider || "openrouter"} · {adminData.wachabe?.model || "openrouter/free"}</span><button className="settings-primary-action" onClick={saveWachabeModel} disabled={wachabeSaving || (adminData.wachabe?.provider === wachabeProvider && adminData.wachabe?.model === wachabeModel)}>{wachabeSaving ? "Saving…" : "Save Wachabe model"}</button></div>
+            <div className="admin-footnote">The selected provider's API key must be configured in Vercel. The underlying model is hidden from users and is applied server-side.</div>
           </div>
           <div className="admin-section-title">API USAGE & COST TRACKING</div>
           <div className="admin-stat-grid usage-admin-grid">
