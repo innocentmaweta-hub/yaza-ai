@@ -13,7 +13,7 @@ The chat API is a Vercel serverless function in `api/chat.js`. For local API tes
 
 ## Deploy to Vercel
 
-Import this repository into Vercel, use the Vite framework preset, and add the provider keys as environment variables. Never put provider keys in frontend variables such as `VITE_*`.
+Import this repository into Vercel, use the Vite framework preset, and add the provider keys as environment variables. Never put provider keys in frontend variables such as `VITE_*`. Keep service-role and payment-provider secrets exclusively in server-side environment variables.
 
 ## Providers
 
