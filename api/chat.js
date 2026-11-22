@@ -16,8 +16,19 @@ function cleanMessages(messages) {
   ).map(m => ({ role: m.role, content: m.content.slice(0, 20000) }));
 }
 
+function providerError(error) {
+  console.error("Yaza AI provider error:", error?.message || error);
+  if (error?.status === 401) return "The provider rejected its API key. Check the key in your deployment settings.";
+  if (error?.status === 429) return "This provider is currently rate-limiting requests. Please wait and try again.";
+  return "Yaza AI could not reach that model. Check the provider, model name, and API access, then try again.";
+}
+
+function sendEvent(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
 export default async function handler(req, res) {
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed." });
@@ -39,7 +50,8 @@ export default async function handler(req, res) {
     ? req.body.model : config.model;
 
   try {
-    let answer = "";
+    let stream;
+    let client;
     if (provider === "gemini") {
       const ai = new GoogleGenAI({ apiKey });
       const history = messages.slice(0, -1).map(m => ({
@@ -51,8 +63,7 @@ export default async function handler(req, res) {
         history,
         config: { systemInstruction: "You are Yaza AI, a helpful, thoughtful, and capable AI assistant. Be clear, accurate, and honest about uncertainty." }
       });
-      const result = await chat.sendMessage({ message: messages[messages.length - 1].content });
-      answer = result.text || "";
+      stream = await chat.sendMessageStream({ message: messages[messages.length - 1].content });
     } else {
       const options = { apiKey };
       if (provider === "openrouter") {
@@ -63,27 +74,44 @@ export default async function handler(req, res) {
         };
       }
       if (provider === "kimi") options.baseURL = "https://api.moonshot.ai/v1";
-      const client = new OpenAI(options);
-      const completion = await client.chat.completions.create({
+      client = new OpenAI(options);
+      stream = await client.chat.completions.create({
         model,
         messages: [
           { role: "system", content: "You are Yaza AI, a helpful, thoughtful, and capable AI assistant. Be clear, accurate, and honest about uncertainty." },
           ...messages
         ],
-        temperature: 0.7
+        temperature: 0.7,
+        stream: true
       });
-      answer = completion.choices?.[0]?.message?.content || "";
     }
 
-    if (!answer) return res.status(502).json({ error: "The model returned an empty response. Please try again." });
-    return res.status(200).json({ answer, provider, model });
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    let hasContent = false;
+    for await (const chunk of stream) {
+      const delta = provider === "gemini"
+        ? (chunk.text || "")
+        : (chunk.choices?.[0]?.delta?.content || "");
+      if (typeof delta === "string" && delta) {
+        hasContent = true;
+        sendEvent(res, { delta });
+      }
+    }
+
+    if (!hasContent) sendEvent(res, { error: "The model returned an empty response. Please try again." });
+    else sendEvent(res, { done: true, provider, model });
+    return res.end();
   } catch (error) {
-    console.error("Yaza AI provider error:", provider, error?.message || error);
-    const message = error?.status === 401
-      ? "The provider rejected its API key. Check the key in your deployment settings."
-      : error?.status === 429
-        ? "This provider is currently rate-limiting requests. Please wait and try again."
-        : "Yaza AI could not reach that model. Check the provider, model name, and API access, then try again.";
+    const message = providerError(error);
+    if (res.headersSent) {
+      sendEvent(res, { error: message });
+      return res.end();
+    }
     return res.status(502).json({ error: message });
   }
 }
