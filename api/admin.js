@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const AVAILABLE_MODELS = {
   openai: ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  openrouter: ["openrouter/free"],
+  openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
   claude: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
   deepseek: ["deepseek-flash", "deepseek-v4-pro"]
@@ -12,7 +12,7 @@ const MODEL_LABELS = {
   "openai/gpt-6.2-astra":"OpenAI · GPT-6.2 Astra","openai/gpt-6.2-sol":"OpenAI · GPT-6.2 Sol",
   "openai/gpt-4.1-mini":"OpenAI · GPT-4.1 mini","openai/gpt-4.1":"OpenAI · GPT-4.1","openai/o4-mini":"OpenAI · o4-mini",
   "gemini/gemini-2.5-flash":"Gemini · 2.5 Flash","gemini/gemini-2.5-pro":"Gemini · 2.5 Pro","gemini/gemini-2.0-flash":"Gemini · 2.0 Flash",
-  "openrouter/openrouter/free":"OpenRouter · Free model","openrouter/~google/gemini-flash-latest":"OpenRouter · Gemini Flash latest",
+  "openrouter/openrouter/free":"OpenRouter · Automatic","openrouter/~google/gemini-flash-latest":"OpenRouter · Gemini Flash latest",
   "openrouter/google/gemini-3.7-flash":"OpenRouter · Gemini 3.7 Flash","openrouter/openai/gpt-4.1":"OpenRouter · GPT-4.1",
   "openrouter/deepseek/deepseek-r1":"OpenRouter · DeepSeek R1","openrouter/anthropic/claude-sonnet-4":"OpenRouter · Claude Sonnet 4",
   "kimi/moonshot-v1-8k":"Kimi · 8K","kimi/moonshot-v1-32k":"Kimi · 32K","kimi/moonshot-v1-128k":"Kimi · 128K",
