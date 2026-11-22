@@ -315,6 +315,7 @@ revoke all on public.wallet_accounts, public.wallet_transactions, public.usage_r
 grant select, insert, update, delete on public.wallet_accounts, public.wallet_transactions, public.usage_reservations, public.payment_topups, public.model_pricing to service_role;
 
 insert into public.model_pricing(model_key,enabled,pricing_mode) values
+ ('openai/gpt-6.2-astra',false,'tokens'),('openai/gpt-6.2-sol',false,'tokens'),
  ('openai/gpt-4.1-mini',false,'tokens'),('openai/gpt-4.1',false,'tokens'),('openai/o4-mini',false,'tokens'),
  ('gemini/gemini-2.5-flash',false,'tokens'),('gemini/gemini-2.5-pro',false,'tokens'),('gemini/gemini-2.0-flash',false,'tokens'),
  ('openrouter/openrouter/free',false,'tokens'),('openrouter/~google/gemini-flash-latest',false,'tokens'),
