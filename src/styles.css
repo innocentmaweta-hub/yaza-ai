@@ -96,3 +96,41 @@
 .admin-empty,.admin-loading{padding:18px;color:#92949e;font-size:12px;text-align:center}
 .admin-footnote{margin-top:16px;color:#777984;font-size:10px;line-height:1.5}
 @media(max-width:600px){.admin-dialog{padding:22px 16px}.admin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-table-row{grid-template-columns:1fr 1.2fr 55px;padding:10px 8px;font-size:10px}.admin-heading h2{font-size:19px}}
+
+
+/* ChatGPT-style account menu and settings */
+.account-menu-wrap{position:relative}
+.account-menu{position:absolute;left:0;bottom:calc(100% + 9px);z-index:50;width:min(265px,calc(100vw - 36px));padding:8px;border:1px solid #393a43;border-radius:13px;background:#22232a;box-shadow:0 16px 42px #0009}
+.account-menu-heading{display:flex;align-items:center;gap:10px;padding:9px 8px 12px}
+.account-menu-heading>div:last-child{display:grid;gap:4px;min-width:0}
+.account-menu-heading strong{overflow:hidden;text-overflow:ellipsis;color:#f0eff2;font-size:11px}
+.account-menu-heading span{color:#8d8f99;font-size:10px}
+.account-menu-divider{height:1px;margin:5px 2px;background:#393a43}
+.account-menu>button{width:100%;height:38px;display:flex;align-items:center;gap:10px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#d4d4dc;text-align:left;font-size:11px}
+.account-menu>button:hover{background:#303139;color:#fff}
+.account-menu>button svg{color:#a0a1ab}
+.account-menu>button.account-menu-signout{color:#e6a097}
+.account-menu-count{margin-left:auto;color:#92939d;font-size:10px}
+.settings-backdrop{z-index:120}
+.settings-dialog{position:relative;width:min(100%,620px);max-height:min(88vh,850px);overflow:auto;padding:30px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:#17191e;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.settings-title{display:flex;align-items:center;gap:13px;padding-right:38px;margin-bottom:20px}
+.settings-title .auth-mark{flex:0 0 44px;margin:0}
+.settings-title h2{margin:0 0 5px;color:#f5f3f1;font-size:23px}
+.settings-title p{margin:0;color:#9b9da6;font-size:12px}
+.settings-section{padding:17px 0;border-top:1px solid #303139}
+.settings-section-title{margin-bottom:12px;color:#e49a7b;font-size:9px;font-weight:800;letter-spacing:1.3px}
+.settings-row{min-height:49px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.settings-row>div,.settings-link-row>div{display:grid;gap:4px}
+.settings-row strong,.settings-link-row strong{color:#e3e2e7;font-size:12px}
+.settings-row span,.settings-link-row span{color:#898b95;font-size:10px}
+.settings-value{color:#c7c7cf!important}
+.settings-field{display:grid;gap:7px;margin:11px 0;color:#c9c9ce;font-size:11px;font-weight:600}
+.settings-field select{width:100%;padding:11px 12px;border:1px solid #3b3c45;border-radius:9px;outline:none;color:#e6e5ea;background:#202127;font:inherit}
+.settings-field select:focus{border-color:#d9896b}
+.settings-help{margin:10px 0 0;color:#858792;font-size:10px;line-height:1.6}
+.settings-link-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border:0;background:none;text-align:left}
+.settings-link-row>span{display:flex;align-items:center;gap:5px;color:#d99a7c}
+.settings-text-button{padding:7px 10px;border:1px solid #594039;border-radius:8px;color:#e6a184;background:#302321;font-size:10px}
+.settings-footer{display:flex;align-items:center;justify-content:space-between;padding-top:17px;border-top:1px solid #303139;color:#777984;font-size:10px}
+.settings-footer .auth-submit{margin:0;padding:9px 18px;font-size:11px}
+@media(max-width:520px){.settings-dialog{padding:23px 17px}.settings-title h2{font-size:21px}.account-menu{width:250px}}
