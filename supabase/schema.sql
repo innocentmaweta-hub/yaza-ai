@@ -42,8 +42,8 @@ values (
   array['image/png','image/jpeg','image/webp','image/gif','application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'text/plain','text/markdown','text/csv','application/json','application/xml',
-    'text/html','text/css','text/javascript','application/javascript',
-    'text/x-python','text/x-java-source','text/x-sql']
+    'text/html','text/css','text/javascript','application/javascript','text/jsx','text/typescript',
+    'application/typescript','text/x-c','text/x-c++','application/sql','text/x-python','text/x-java-source','text/x-sql']
 )
 on conflict (id) do update set public=false, file_size_limit=10485760, allowed_mime_types=excluded.allowed_mime_types;
 drop policy if exists "Yaza users upload own chat attachments" on storage.objects;
