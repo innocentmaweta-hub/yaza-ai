@@ -190,7 +190,8 @@ export default async function handler(req, res) {
   const requestedProvider = String(req.body?.provider || "yaza").toLowerCase();
   let provider = requestedProvider;
   let model = typeof req.body?.model === "string" && req.body.model.length < 120
-    ? req.body.model : "";
+    ? req.body.model.trim() : "";
+  if (!model) model = requestedProvider === "yaza" ? "wachabe" : (PROVIDERS[requestedProvider]?.model || "");
   if (requestedProvider === "openrouter") model = "openrouter/free";
   const publicModelKey = requestedProvider + "/" + model;
   if (!ALLOWED_MODELS[requestedProvider]?.includes(model)) {
@@ -229,21 +230,27 @@ export default async function handler(req, res) {
   if (attachments.filter(file => file?.kind === "image").length > 10) {
     return res.status(400).json({ error: "Too many image pages. Attach fewer scanned pages and try again." });
   }
-  const imagePayloadBytes = attachments.filter(file => file?.kind === "image" && typeof file.data === "string")
-    .reduce((total, file) => total + Math.ceil(file.data.length * 0.75), 0);
-  if (imagePayloadBytes > 2.8 * 1024 * 1024) {
-    return res.status(413).json({ error: "The scanned pages are too large to send together. Attach fewer pages or use a smaller PDF." });
-  }
+  let imagePayloadBytes = 0;
   for (const file of attachments) {
-    if (!file || typeof file.name !== "string" || file.name.length > 180) {
+    if (!file || typeof file.name !== "string" || file.name.length > 180 || !["image", "text"].includes(file.kind)) {
       return res.status(400).json({ error: "One of the attached files is invalid." });
     }
-    if (file.kind === "image" && (typeof file.data !== "string" || !/^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.test(file.data))) {
-      return res.status(400).json({ error: `The image ${file.name} has an unsupported format. Use PNG, JPG, WEBP or GIF.` });
+    if (file.kind === "image") {
+      const match = typeof file.data === "string"
+        ? file.data.match(/^data:image\\/(png|jpeg|jpg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i)
+        : null;
+      if (!match || match[2].length % 4 !== 0) {
+        return res.status(400).json({ error: `The image ${file.name} has an unsupported or invalid format. Use PNG, JPG, WEBP or GIF.` });
+      }
+      const padding = match[2].endsWith("==") ? 2 : match[2].endsWith("=") ? 1 : 0;
+      imagePayloadBytes += Math.max(0, Math.floor(match[2].length * 3 / 4) - padding);
     }
     if (file.kind === "text" && (typeof file.text !== "string" || file.text.length > 1_000_000)) {
       return res.status(400).json({ error: `The text file ${file.name} is too large or unreadable.` });
     }
+  }
+  if (imagePayloadBytes > 2.8 * 1024 * 1024) {
+    return res.status(413).json({ error: "The scanned pages are too large to send together. Attach fewer pages or use a smaller PDF." });
   }
   if ((!messages.length && !attachments.length) || (messages.length && messages[messages.length - 1].role !== "user")) {
     return res.status(400).json({ error: "Please send a message first." });
