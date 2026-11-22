@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const AVAILABLE_MODELS = {
   openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
+  openrouter: ["openrouter/free"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
 };
 const MODEL_LABELS = {
