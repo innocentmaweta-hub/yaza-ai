@@ -605,3 +605,50 @@
   .private-label { display: none; }
   .upgrade-btn { font-size: 9px; }
 }
+
+
+/* Explore Yaza entry in the sidebar and its discovery panel. */
+.explore-plan-card {
+  width:100%; border:1px solid var(--border-color,#303139); color:inherit;
+  font:inherit; text-align:left; cursor:pointer; transition:border-color .15s,background .15s;
+}
+.explore-plan-card:hover { border-color:#98634f; background:rgba(152,99,79,.10); }
+.explore-plan-arrow { margin-left:auto; transform:rotate(45deg); color:#d99578; }
+.explore-backdrop { z-index:150; }
+.explore-dialog {
+  position:relative; width:min(680px,calc(100vw - 32px)); max-height:min(86vh,820px);
+  overflow:auto; padding:28px; border:1px solid #35353e; border-radius:20px;
+  background:#191a20; color:#eeeef2; box-shadow:0 24px 80px #0009;
+}
+.explore-dialog .modal-close { position:absolute; top:16px; right:16px; }
+.explore-dialog-heading { display:flex; align-items:flex-start; gap:15px; padding-right:24px; margin-bottom:24px; }
+.explore-dialog-icon { flex:0 0 44px; width:44px; height:44px; display:grid; place-items:center; border-radius:14px; background:#30252a; color:#e3a083; }
+.explore-dialog-heading .eyebrow { color:#d99578; font-size:9px; letter-spacing:.13em; }
+.explore-dialog-heading h2 { margin:5px 0 6px; font-size:25px; }
+.explore-dialog-heading p { margin:0; color:#a4a4ae; font-size:13px; line-height:1.5; }
+.explore-dialog h3 { margin:22px 0 11px; font-size:13px; }
+.explore-mode-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.explore-mode-card,.explore-tools-grid button {
+  min-width:0; display:flex; align-items:center; gap:11px; padding:12px;
+  border:1px solid #34343d; border-radius:12px; background:#202127; color:#e8e8ed;
+  text-align:left; cursor:pointer;
+}
+.explore-mode-card:hover,.explore-tools-grid button:hover { border-color:#98634f; background:#292329; }
+.explore-mode-icon { flex:0 0 34px; width:34px; height:34px; display:grid; place-items:center; border-radius:10px; background:#30252a; color:#d99578; }
+.explore-mode-card span:nth-child(2),.explore-tools-grid button span { display:grid; gap:4px; flex:1; min-width:0; }
+.explore-mode-card strong,.explore-tools-grid strong { font-size:12px; }
+.explore-mode-card small,.explore-tools-grid small { color:#9999a4; font-size:10px; line-height:1.4; }
+.explore-mode-card>svg:last-child { transform:rotate(45deg); color:#858590; }
+.explore-tools-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.explore-tools-grid button>svg { flex:0 0 auto; color:#d99578; }
+.explore-dialog-footnote { margin:18px 0 0; color:#858590; font-size:10px; line-height:1.5; }
+@media(max-width:760px) {
+  .topbar .upgrade-btn { display:none; }
+}
+@media(max-width:520px) {
+  .explore-dialog { padding:22px 16px; border-radius:16px; }
+  .explore-dialog-heading { gap:11px; }
+  .explore-dialog-heading h2 { font-size:22px; }
+  .explore-mode-grid,.explore-tools-grid { grid-template-columns:1fr; }
+  .explore-mode-card,.explore-tools-grid button { padding:11px; }
+}
