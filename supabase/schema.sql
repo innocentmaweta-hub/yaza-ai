@@ -3,6 +3,7 @@ create table if not exists public.conversations (
   id uuid primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
   title text not null default 'New chat',
+  is_archived boolean not null default false,
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
@@ -17,6 +18,8 @@ create table if not exists public.messages (
   created_at timestamptz not null default now()
 );
 create index if not exists conversations_user_updated_idx on public.conversations(user_id, updated_at desc);
+create index if not exists conversations_user_archived_updated_idx on public.conversations(user_id, is_archived, updated_at desc);
+alter table public.conversations add column if not exists is_archived boolean not null default false;
 create index if not exists messages_conversation_created_idx on public.messages(conversation_id, created_at);
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
