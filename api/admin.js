@@ -13,9 +13,9 @@ const MODEL_LABELS = {
   "openrouter/google/gemini-3.7-flash":"OpenRouter · Gemini 3.7 Flash","openrouter/openai/gpt-4.1":"OpenRouter · GPT-4.1",
   "openrouter/deepseek/deepseek-r1":"OpenRouter · DeepSeek R1","openrouter/anthropic/claude-sonnet-4":"OpenRouter · Claude Sonnet 4",
   "kimi/moonshot-v1-8k":"Kimi · 8K","kimi/moonshot-v1-32k":"Kimi · 32K","kimi/moonshot-v1-128k":"Kimi · 128K",
-  "yaza/wachabe":"Yaza AI · Wachabe"
+  "yaza/wachabe":"Yaza AI · Wachabe","image/generation":"Image generation · Seedream 4.5"
 };
-const ALLOWED_PRICING_KEYS = new Set([...Object.entries(AVAILABLE_MODELS).flatMap(([provider,models]) => models.map(model => provider + "/" + model)), "yaza/wachabe"]);
+const ALLOWED_PRICING_KEYS = new Set([...Object.entries(AVAILABLE_MODELS).flatMap(([provider,models]) => models.map(model => provider + "/" + model)), "yaza/wachabe","image/generation"]);
 
 function reply(res, status, body) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
