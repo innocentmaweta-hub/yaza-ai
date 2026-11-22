@@ -216,6 +216,7 @@ function App() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("general");
+  const [settingsMobileDetail, setSettingsMobileDetail] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -1431,16 +1432,16 @@ function App() {
     </div>}
 
     {settingsOpen && <div className="settings-page-backdrop" onClick={() => setSettingsOpen(false)}>
-      <section className="settings-page" onClick={event => event.stopPropagation()}>
+      <section className={`settings-page${settingsMobileDetail ? " settings-mobile-detail" : " settings-mobile-menu"}`} onClick={event => event.stopPropagation()}>
         <aside className="settings-sidebar">
-          <div className="settings-sidebar-top"><div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Settings</strong><span>Yaza AI preferences</span></div></div><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
+          <div className="settings-sidebar-top"><div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Settings</strong><span>Yaza AI preferences</span></div></div><button className="settings-close" onClick={() => { setSettingsOpen(false); setSettingsMobileDetail(false); }} aria-label="Close settings"><X size={18}/></button></div>
           <nav className="settings-nav" aria-label="Settings sections">
-            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["billing","Billing"],["usage","Usage"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => { setSettingsTab(id); if (id === "usage") loadUsageReport(); if (id === "billing") loadWallet(); }}>{label}</button>)}
+            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["billing","Billing"],["usage","Usage"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => { setSettingsTab(id); setSettingsMobileDetail(true); if (id === "usage") loadUsageReport(); if (id === "billing") loadWallet(); }}>{label}<ChevronDown className="settings-nav-chevron" size={14}/></button>)}
           </nav>
           <div className="settings-sidebar-bottom"><span>Yaza AI</span><span>Settings</span></div>
         </aside>
         <main className="settings-content">
-          <div className="settings-mobile-heading"><strong>Settings</strong><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
+          <div className="settings-mobile-heading"><button className="settings-mobile-back" onClick={() => setSettingsMobileDetail(false)}><ArrowDown size={15}/> All settings</button><strong>{({general:"General",ai:"AI preferences",personalization:"Personalization",voice:"Voice",billing:"Billing",usage:"Usage",data:"Data controls",account:"Account"})[settingsTab] || "Settings"}</strong><button className="settings-close" onClick={() => { setSettingsOpen(false); setSettingsMobileDetail(false); }} aria-label="Close settings"><X size={18}/></button></div>
           {settingsTab==="general" && <section className="settings-panel-section"><h2>General</h2><p className="settings-panel-intro">Choose how Yaza AI appears and communicates.</p>
             <div className="settings-option"><div><strong>Language</strong><span>The language used across the Yaza interface.</span></div><span className="settings-chip">English</span></div>
             <div className="settings-option"><div><strong>Appearance</strong><span>Choose the interface theme for this device and your signed-in account.</span></div><select className="settings-inline-select" value={theme} onChange={event => setTheme(event.target.value)}><option value="dark">Dark</option><option value="light">Light</option></select></div>
