@@ -4,8 +4,8 @@ import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth/mammoth.browser";
 import {
-  ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, LogIn, LogOut, Mic, MicOff,
-  FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal,
+  Archive, ArchiveRestore, ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass, LogIn, LogOut, Mic, MicOff,
+  FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal, Pencil,
   PanelLeftClose, Plus, Search, Settings2, Sparkles, SquarePen, Trash2, UserRoundPlus,
   X, Zap
 } from "lucide-react";
@@ -61,6 +61,7 @@ function App() {
   const [providerMenu, setProviderMenu] = useState(false);
   const [modelMenu, setModelMenu] = useState(false);
   const [search, setSearch] = useState("");
+  const [showArchivedChats, setShowArchivedChats] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [imageMode, setImageMode] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -174,7 +175,7 @@ function App() {
   async function loadCloudChats(userId) {
     if (!supabase) return;
     try {
-      const { data: rows, error } = await supabase.from("conversations").select("id,title,updated_at").eq("user_id", userId).order("updated_at", { ascending: false });
+      const { data: rows, error } = await supabase.from("conversations").select("id,title,updated_at,is_archived").eq("user_id", userId).order("updated_at", { ascending: false });
       if (error) throw error;
       const ids = (rows || []).map(row => row.id);
       let messageRows = [];
@@ -184,7 +185,7 @@ function App() {
         messageRows = result.data || [];
       }
       const remoteChats = (rows || []).map(row => ({
-        id: row.id, title: row.title, updatedAt: new Date(row.updated_at).getTime(),
+        id: row.id, title: row.title, isArchived: row.is_archived === true, updatedAt: new Date(row.updated_at).getTime(),
         messages: messageRows.filter(m => m.conversation_id === row.id).map(m => ({ id: m.id, role: m.role, content: m.content, provider: m.provider, model: m.model, attachments: m.attachments || [] }))
       }));
       if (remoteChats.length) { setChats(remoteChats); setActiveId(remoteChats[0].id); }
@@ -203,6 +204,7 @@ function App() {
         for (const chat of chats) {
           const { error: conversationError } = await supabase.from("conversations").upsert({
             id: chat.id, user_id: session.user.id, title: chat.title,
+            is_archived: chat.isArchived === true,
             updated_at: new Date(chat.updatedAt || Date.now()).toISOString()
           });
           if (conversationError) throw conversationError;
@@ -330,9 +332,14 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const visibleChats = useMemo(() => chats
-    .filter(c => c.title.toLowerCase().includes(search.toLowerCase()))
-    .sort((a,b) => b.updatedAt - a.updatedAt), [chats, search]);
+  const visibleChats = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return chats
+      .filter(chat => (chat.isArchived === true) === showArchivedChats)
+      .filter(chat => !term || chat.title.toLowerCase().includes(term) ||
+        (chat.messages || []).some(message => String(message.content || "").toLowerCase().includes(term)))
+      .sort((a,b) => b.updatedAt - a.updatedAt);
+  }, [chats, search, showArchivedChats]);
 
   function updateChat(id, updater) {
     setChats(old => old.map(c => c.id === id ? { ...updater(c), updatedAt: Date.now() } : c));
@@ -577,11 +584,36 @@ function App() {
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
 
-  function deleteChat(id) {
-    const remaining = chats.filter(c => c.id !== id);
+  function renameChat(id) {
+    const chat = chats.find(item => item.id === id);
+    if (!chat) return;
+    const nextTitle = window.prompt("Rename conversation", chat.title);
+    if (nextTitle === null) return;
+    const title = nextTitle.trim();
+    if (!title) { setNotice("A conversation name cannot be empty."); return; }
+    updateChat(id, current => ({ ...current, title: title.slice(0, 120) }));
+  }
+  function archiveChat(id, archived) {
+    updateChat(id, current => ({ ...current, isArchived: archived }));
+    if (archived && activeId === id) {
+      const next = chats.find(item => item.id !== id && item.isArchived !== true);
+      if (next) setActiveId(next.id);
+      else newChat();
+    }
+    setNotice(archived ? "Conversation archived." : "Conversation restored.");
+  }
+  async function deleteChat(id) {
+    const chat = chats.find(item => item.id === id);
+    if (!chat || !window.confirm(`Delete "${chat.title}" permanently? This also deletes its saved messages.`)) return;
+    if (supabase && session?.user) {
+      const { error } = await supabase.from("conversations").delete().eq("id", id).eq("user_id", session.user.id);
+      if (error) { setNotice(error.message || "Could not delete this conversation from your account."); return; }
+    }
+    const remaining = chats.filter(item => item.id !== id);
     const next = remaining.length ? remaining : [makeChat()];
     setChats(next);
     if (activeId === id) setActiveId(next[0].id);
+    setNotice("Conversation deleted.");
   }
   function toggleVoiceInput() {
     if (!voiceInputEnabled) { setNotice("Voice input is disabled in Settings."); return; }
@@ -746,14 +778,18 @@ function App() {
       <button className="new-chat-btn" onClick={newChat}><SquarePen size={17}/> <span>New chat</span><span className="shortcut">⌘ K</span></button>
       <button className="memory-nav-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setMemoryOpen(true); }}><Sparkles size={16}/> <span>Memory</span><span className="memory-count">{memories.length}</span></button>
       {adminAccess && <button className="memory-nav-btn admin-nav-btn" onClick={openAdminDashboard}><Settings2 size={16}/> <span>Admin dashboard</span></button>}
-      <div className="side-search"><Search size={15}/><input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search chats"/><span>⌘K</span></div>
-      <div className="history-label">YOUR CHATS</div>
+      <div className="side-search"><Search size={15}/><input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations"/><span>⌘K</span></div>
+      <div className="history-heading"><div className="history-label">{showArchivedChats ? "ARCHIVED" : "YOUR CHATS"}</div><button className="history-view-toggle" onClick={() => setShowArchivedChats(value => !value)}>{showArchivedChats ? "Active" : "Archived"}</button></div>
       <div className="chat-list">
         {visibleChats.map(chat => <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""}`}>
           <button className="chat-select" onClick={() => setActiveId(chat.id)}><MessageSquare size={15}/><span>{chat.title}</span></button>
-          <button className="chat-delete" onClick={() => deleteChat(chat.id)} title="Delete chat"><Trash2 size={14}/></button>
+          <div className="chat-row-actions">
+            <button className="chat-action" onClick={() => renameChat(chat.id)} title="Rename conversation" aria-label="Rename conversation"><Pencil size={13}/></button>
+            <button className="chat-action" onClick={() => archiveChat(chat.id, !chat.isArchived)} title={chat.isArchived ? "Restore conversation" : "Archive conversation"} aria-label={chat.isArchived ? "Restore conversation" : "Archive conversation"}>{chat.isArchived ? <ArchiveRestore size={13}/> : <Archive size={13}/>}</button>
+            <button className="chat-action chat-delete" onClick={() => deleteChat(chat.id)} title="Delete conversation" aria-label="Delete conversation"><Trash2 size={13}/></button>
+          </div>
         </div>)}
-        {!visibleChats.length && <p className="empty-search">No matching chats</p>}
+        {!visibleChats.length && <p className="empty-search">{search ? "No conversations match your search" : showArchivedChats ? "No archived conversations" : "No conversations yet"}</p>}
       </div>
       <div className="side-bottom">
         <div className="plan-card"><div className="plan-icon"><Zap size={16}/></div><div><strong>Yaza AI</strong><span>Your space to think bigger.</span></div><MoreHorizontal size={17}/></div>
