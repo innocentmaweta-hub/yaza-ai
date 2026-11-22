@@ -6,6 +6,16 @@ const AVAILABLE_MODELS = {
   openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
 };
+const MODEL_LABELS = {
+  "openai/gpt-4.1-mini":"OpenAI · GPT-4.1 mini","openai/gpt-4.1":"OpenAI · GPT-4.1","openai/o4-mini":"OpenAI · o4-mini",
+  "gemini/gemini-2.5-flash":"Gemini · 2.5 Flash","gemini/gemini-2.5-pro":"Gemini · 2.5 Pro","gemini/gemini-2.0-flash":"Gemini · 2.0 Flash",
+  "openrouter/openrouter/free":"OpenRouter · Free model","openrouter/~google/gemini-flash-latest":"OpenRouter · Gemini Flash latest",
+  "openrouter/google/gemini-3.7-flash":"OpenRouter · Gemini 3.7 Flash","openrouter/openai/gpt-4.1":"OpenRouter · GPT-4.1",
+  "openrouter/deepseek/deepseek-r1":"OpenRouter · DeepSeek R1","openrouter/anthropic/claude-sonnet-4":"OpenRouter · Claude Sonnet 4",
+  "kimi/moonshot-v1-8k":"Kimi · 8K","kimi/moonshot-v1-32k":"Kimi · 32K","kimi/moonshot-v1-128k":"Kimi · 128K",
+  "yaza/wachabe":"Yaza AI · Wachabe"
+};
+const ALLOWED_PRICING_KEYS = new Set([...Object.entries(AVAILABLE_MODELS).flatMap(([provider,models]) => models.map(model => provider + "/" + model)), "yaza/wachabe"]);
 
 function reply(res, status, body) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -41,18 +51,43 @@ export default async function handler(req, res) {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
     if (req.method === "POST") {
-      if (req.body?.action !== "set-wachabe-model") return reply(res, 400, { error: "Unsupported admin action." });
-      const provider = String(req.body?.provider || "").toLowerCase();
-      const model = String(req.body?.model || "");
-      if (!AVAILABLE_MODELS[provider]?.includes(model)) {
-        return reply(res, 400, { error: "Choose a provider and model from the available Yaza model list." });
+      if (req.body?.action === "set-wachabe-model") {
+        const provider = String(req.body?.provider || "").toLowerCase();
+        const model = String(req.body?.model || "");
+        if (!AVAILABLE_MODELS[provider]?.includes(model)) {
+          return reply(res, 400, { error: "Choose a provider and model from the available Yaza model list." });
+        }
+        const wachabe = { provider, model };
+        const { error } = await admin.from("platform_settings").upsert({
+          setting_key: "wachabe_model", setting_value: wachabe, updated_at: new Date().toISOString()
+        }, { onConflict: "setting_key" });
+        if (error) throw error;
+        return reply(res, 200, { success: true, wachabe });
       }
-      const wachabe = { provider, model };
-      const { error } = await admin.from("platform_settings").upsert({
-        setting_key: "wachabe_model", setting_value: wachabe, updated_at: new Date().toISOString()
-      }, { onConflict: "setting_key" });
-      if (error) throw error;
-      return reply(res, 200, { success: true, wachabe });
+      if (req.body?.action === "save-model-pricing") {
+        const modelKey = String(req.body?.model_key || "");
+        const pricingMode = String(req.body?.pricing_mode || "");
+        const enabled = req.body?.enabled === true;
+        const inputRate = Number(req.body?.input_rate_per_1k_mwk);
+        const outputRate = Number(req.body?.output_rate_per_1k_mwk);
+        const messageRate = Number(req.body?.message_rate_mwk);
+        if (!ALLOWED_PRICING_KEYS.has(modelKey) || !["tokens","message"].includes(pricingMode)
+          || ![inputRate,outputRate,messageRate].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)) {
+          return reply(res, 400, { error: "Check the model and pricing values. Rates must be between 0 and 1,000,000 MWK." });
+        }
+        if (pricingMode === "tokens" && inputRate + outputRate <= 0 && enabled) {
+          return reply(res, 400, { error: "Set an input or output token rate before enabling this model." });
+        }
+        if (pricingMode === "message" && messageRate <= 0 && enabled) {
+          return reply(res, 400, { error: "Set a message price greater than zero before enabling this model." });
+        }
+        const row = { model_key:modelKey, enabled, pricing_mode:pricingMode, input_rate_per_1k_mwk:inputRate,
+          output_rate_per_1k_mwk:outputRate, message_rate_mwk:messageRate, updated_at:new Date().toISOString() };
+        const { data, error } = await admin.from("model_pricing").upsert(row,{onConflict:"model_key"}).select("*").single();
+        if (error) throw error;
+        return reply(res,200,{success:true,pricing:data});
+      }
+      return reply(res, 400, { error: "Unsupported admin action." });
     }
 
     const { data: routingRow, error: routingError } = await admin.from("platform_settings")
@@ -62,18 +97,24 @@ export default async function handler(req, res) {
     const wachabe = AVAILABLE_MODELS[configuredRoute.provider]?.includes(configuredRoute.model)
       ? configuredRoute : { provider: "openrouter", model: "openrouter/free" };
 
-    const [usersResult, conversationsResult, messagesCountResult, messagesResult, usageResult] = await Promise.all([
+    const [usersResult, conversationsResult, messagesCountResult, messagesResult, usageResult, pricingResult, walletCountResult, walletTransactionsResult] = await Promise.all([
       admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
       admin.from("conversations").select("id", { count: "exact", head: true }),
       admin.from("messages").select("id", { count: "exact", head: true }),
       admin.from("messages").select("provider,model,created_at").order("created_at", { ascending: false }).limit(5000),
-      admin.from("usage_events").select("user_id,provider,model,status,input_tokens_estimate,output_tokens_estimate,prompt_tokens,completion_tokens,reported_cost_usd,created_at").order("created_at", { ascending: false }).limit(10000)
+      admin.from("usage_events").select("user_id,provider,model,public_model_key,billed_amount_minor,billing_status,status,input_tokens_estimate,output_tokens_estimate,prompt_tokens,completion_tokens,reported_cost_usd,created_at").order("created_at", { ascending: false }).limit(10000),
+      admin.from("model_pricing").select("*").order("model_key"),
+      admin.from("wallet_accounts").select("user_id", { count:"exact", head:true }),
+      admin.from("wallet_transactions").select("user_id,kind,amount_minor,reference,metadata,created_at").order("created_at",{ascending:false}).limit(10000)
     ]);
     if (usersResult.error) throw usersResult.error;
     if (conversationsResult.error) throw conversationsResult.error;
     if (messagesCountResult.error) throw messagesCountResult.error;
     if (messagesResult.error) throw messagesResult.error;
     if (usageResult.error) throw usageResult.error;
+    if (pricingResult.error) throw pricingResult.error;
+    if (walletCountResult.error) throw walletCountResult.error;
+    if (walletTransactionsResult.error) throw walletTransactionsResult.error;
 
     const grouped = new Map();
     for (const message of messagesResult.data || []) {
@@ -123,6 +164,19 @@ export default async function handler(req, res) {
         usageByUser.set(event.user_id, user);
       }
     }
+    const walletRows = walletTransactionsResult.data || [];
+    const walletModelRevenue = new Map();
+    let totalTopupsMinor = 0, totalChargesMinor = 0, monthTopupsMinor = 0, monthChargesMinor = 0;
+    for (const item of walletRows) {
+      const amount = Number(item.amount_minor || 0);
+      const created = new Date(item.created_at);
+      if (item.kind === "topup") { totalTopupsMinor += amount; if (created >= monthStart) monthTopupsMinor += amount; }
+      if (item.kind === "usage_charge") {
+        totalChargesMinor += Math.abs(amount); if (created >= monthStart) monthChargesMinor += Math.abs(amount);
+        const modelKey = item.metadata?.model_key || "unknown";
+        walletModelRevenue.set(modelKey,(walletModelRevenue.get(modelKey)||0)+Math.abs(amount));
+      }
+    }
     const userEmails = new Map((usersResult.data?.users || []).map(user => [user.id, user.email || user.id.slice(0, 8)]));
     const users = (usersResult.data?.users || []).map(user => ({
       id: user.id,
@@ -134,6 +188,14 @@ export default async function handler(req, res) {
     return reply(res, 200, {
       isAdmin: true,
       wachabe: { ...wachabe, availableModels: AVAILABLE_MODELS },
+      modelPricing: (pricingResult.data || []).map(item => ({ ...item, label: MODEL_LABELS[item.model_key] || item.model_key,
+        input_rate_per_1k_mwk:Number(item.input_rate_per_1k_mwk || 0), output_rate_per_1k_mwk:Number(item.output_rate_per_1k_mwk || 0), message_rate_mwk:Number(item.message_rate_mwk || 0) })),
+      wallet: {
+        accounts: walletCountResult.count || 0,
+        totalTopupsMinor, totalChargesMinor, monthTopupsMinor, monthChargesMinor,
+        transactionSample: walletRows.length, sampleMayBeTruncated: walletRows.length >= 10000,
+        revenueByModel: [...walletModelRevenue.entries()].map(([modelKey,amountMinor])=>({modelKey,label:MODEL_LABELS[modelKey]||modelKey,amountMinor})).sort((a,b)=>b.amountMinor-a.amountMinor)
+      },
       stats: {
         users: usersResult.data?.users?.length || 0,
         usersListCapped: (usersResult.data?.users?.length || 0) >= 1000,
