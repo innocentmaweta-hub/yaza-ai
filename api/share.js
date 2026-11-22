@@ -41,20 +41,10 @@ export default async function handler(req, res) {
       if (!/^[a-f0-9]{64}$/i.test(token)) return reply(res, 404, { error: "This shared conversation is unavailable or its link has been revoked." });
       const tokenHash = createHash("sha256").update(token).digest("hex");
       const { data: share, error: shareError } = await admin.from("conversation_shares")
-        .select("conversation_id,revoked_at").eq("token_hash", tokenHash).maybeSingle();
+        .select("title,messages,revoked_at").eq("token_hash", tokenHash).maybeSingle();
       if (shareError) throw shareError;
       if (!share || share.revoked_at) return reply(res, 404, { error: "This shared conversation is unavailable or its link has been revoked." });
-      const { data: conversation, error: conversationError } = await admin.from("conversations")
-        .select("id,title").eq("id", share.conversation_id).maybeSingle();
-      if (conversationError) throw conversationError;
-      if (!conversation) return reply(res, 404, { error: "This shared conversation is no longer available." });
-      const { data: messages, error: messagesError } = await admin.from("messages")
-        .select("id,role,content,created_at").eq("conversation_id", conversation.id)
-        .order("created_at", { ascending: true }).limit(500);
-      if (messagesError) throw messagesError;
-      return reply(res, 200, { title: conversation.title, messages: (messages || []).map(message => ({
-        id: message.id, role: message.role, content: String(message.content || "").slice(0, 20000), createdAt: message.created_at
-      })) });
+      return reply(res, 200, { title: share.title, messages: Array.isArray(share.messages) ? share.messages : [] });
     }
 
     if (req.method === "POST" || req.method === "DELETE") {
@@ -69,13 +59,19 @@ export default async function handler(req, res) {
 
       if (req.method === "POST") {
         const { data: messages, error: messagesError } = await admin.from("messages")
-          .select("id").eq("conversation_id", conversationId).limit(1);
+          .select("id,role,content,created_at").eq("conversation_id", conversationId)
+          .order("created_at", { ascending: true }).limit(500);
         if (messagesError) throw messagesError;
         if (!messages?.length) return reply(res, 400, { error: "Add at least one message before sharing this conversation." });
+        const snapshot = messages.map(message => ({
+          id: message.id, role: message.role, content: String(message.content || "").slice(0, 20000),
+          createdAt: message.created_at
+        }));
         const token = randomBytes(32).toString("hex");
         const tokenHash = createHash("sha256").update(token).digest("hex");
         const { error: insertError } = await admin.from("conversation_shares").insert({
-          user_id: user.id, conversation_id: conversationId, token_hash: tokenHash
+          user_id: user.id, conversation_id: conversationId, token_hash: tokenHash,
+          title: String(conversation.title || "Shared conversation").slice(0, 120), messages: snapshot
         });
         if (insertError) throw insertError;
         return reply(res, 201, { token });
