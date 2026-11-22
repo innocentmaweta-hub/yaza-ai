@@ -28,3 +28,5 @@
 .attachment-chip button{display:grid;place-items:center;border:0;background:transparent;color:#999aa4;padding:2px}
 .sent-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}
 .sent-attachment{max-width:260px;padding:6px 8px;background:#24252c;color:#bfc0c8;border:1px solid #41424c;cursor:pointer;font:inherit;font-size:10px}
+
+.tool-btn.tool-active{color:#f0a27f;background:#3a2927;border:1px solid #69463c}.tool-btn.tool-active:hover{background:#49312b}
