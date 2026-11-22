@@ -1202,8 +1202,8 @@ function App() {
           </div>
           <div className="admin-section-title">USAGE BY ACCOUNT</div>
           <div className="admin-table usage-user-table">
-            <div className="admin-table-row admin-table-head"><span>Account</span><span>Requests</span><span>Estimated tokens</span><span>Reported cost (USD)</span></div>
-            {(adminData.usage?.byUser || []).map((item,index) => <div className="admin-table-row" key={index}><span>{item.account}</span><strong>{item.requests}</strong><span>{(item.estimatedInputTokens + item.estimatedOutputTokens).toLocaleString()}</span><strong>${Number(item.reportedCostUsd || 0).toFixed(4)}</strong></div>)}
+            <div className="admin-table-row admin-table-head"><span>Account</span><span>Requests</span><span>Estimated tokens</span><span>Reported cost (USD)</span><span>Wallet charges (MWK)</span></div>
+            {(adminData.usage?.byUser || []).map((item,index) => <div className="admin-table-row" key={index}><span>{item.account}</span><strong>{item.requests}</strong><span>{(item.estimatedInputTokens + item.estimatedOutputTokens).toLocaleString()}</span><strong>${Number(item.reportedCostUsd || 0).toFixed(4)}</strong><strong>MK {(Number(item.billedAmountMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>)}
             {!(adminData.usage?.byUser || []).length && <div className="admin-empty">No signed-in account usage recorded yet.</div>}
           </div>
           <div className="admin-section-title">RECENT ACCOUNTS</div>
