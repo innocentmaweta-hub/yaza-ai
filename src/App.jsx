@@ -231,6 +231,7 @@ function App() {
   const [adminAccess, setAdminAccess] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminTab, setAdminTab] = useState("overview");
+  const [adminMobileDetail, setAdminMobileDetail] = useState(false);
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminData, setAdminData] = useState(null);
   const [wachabeProvider, setWachabeProvider] = useState("openrouter");
@@ -1297,20 +1298,20 @@ function App() {
       </footer>
     </main>
 
-    {adminOpen && <div className="settings-page-backdrop admin-page-backdrop" onClick={() => setAdminOpen(false)}>
-      <section className="settings-page admin-page" onClick={event => event.stopPropagation()}>
+    {adminOpen && <div className="settings-page-backdrop admin-page-backdrop" onClick={() => { setAdminOpen(false); setAdminMobileDetail(false); }}>
+      <section className={`settings-page admin-page${adminMobileDetail ? " admin-mobile-detail" : " admin-mobile-menu"}`} onClick={event => event.stopPropagation()}>
         <aside className="settings-sidebar">
           <div className="settings-sidebar-top">
             <div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Admin Center</strong><span>Yaza AI management</span></div></div>
-            <button className="settings-close" onClick={() => setAdminOpen(false)} aria-label="Close admin dashboard"><X size={18}/></button>
+            <button className="settings-close" onClick={() => { setAdminOpen(false); setAdminMobileDetail(false); }} aria-label="Close admin dashboard"><X size={18}/></button>
           </div>
           <nav className="settings-nav" aria-label="Admin sections">
-            {[["overview","Overview"],["models","AI models & pricing"],["billing","Payments & wallet"],["usage","Usage & costs"],["accounts","User accounts"]].map(([id,label]) => <button key={id} className={adminTab===id?"active":""} onClick={() => setAdminTab(id)}>{label}</button>)}
+            {[["overview","Overview"],["models","AI models & pricing"],["billing","Payments & wallet"],["usage","Usage & costs"],["accounts","User accounts"]].map(([id,label]) => <button key={id} className={adminTab===id?"active":""} onClick={() => { setAdminTab(id); setAdminMobileDetail(true); }}>{label}<ChevronDown className="settings-nav-chevron" size={14}/></button>)}
           </nav>
           <div className="settings-sidebar-bottom"><span>Yaza AI</span><span>Administrator tools</span></div>
         </aside>
         <main className="settings-content admin-content">
-          <div className="settings-mobile-heading"><strong>Admin Center</strong><button className="settings-close" onClick={() => setAdminOpen(false)} aria-label="Close admin dashboard"><X size={18}/></button></div>
+          <div className="settings-mobile-heading"><button className="settings-mobile-back" onClick={() => setAdminMobileDetail(false)}><ArrowDown size={15}/> All sections</button><strong>{({overview:"Overview",models:"AI models & pricing",billing:"Payments & wallet",usage:"Usage & costs",accounts:"User accounts"})[adminTab] || "Admin Center"}</strong><button className="settings-close" onClick={() => { setAdminOpen(false); setAdminMobileDetail(false); }} aria-label="Close admin dashboard"><X size={18}/></button></div>
           {adminBusy && <div className="admin-loading">Loading platform statistics…</div>}
           {adminData && <>
             {adminTab === "overview" && <section className="settings-panel-section"><h2>Platform overview</h2><p className="settings-panel-intro">A snapshot of Yaza AI activity and the controls available to administrators.</p>
