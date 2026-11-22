@@ -33,6 +33,8 @@ create policy "Users manage messages in their conversations" on public.messages
 grant select, insert, update, delete on public.conversations to authenticated;
 grant select, insert, update, delete on public.messages to authenticated;
 
+alter table public.messages add column if not exists attachments jsonb not null default '[]'::jsonb;
+
 -- Private permanent storage for each signed-in user's chat attachments.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
