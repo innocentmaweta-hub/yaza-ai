@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 const PROVIDERS = {
   openai: { key: "OPENAI_API_KEY", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" },
@@ -38,6 +40,88 @@ function providerError(error) {
 
 function sendEvent(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+
+function quotaSettings() {
+  const number = (value, fallback) => {
+    const parsed = Number.parseInt(value || "", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 1000000) : fallback;
+  };
+  return {
+    daily: number(process.env.YAZA_DAILY_REQUEST_LIMIT, 50),
+    monthly: number(process.env.YAZA_MONTHLY_REQUEST_LIMIT, 1000),
+    guestDaily: number(process.env.YAZA_GUEST_DAILY_REQUEST_LIMIT, 10)
+  };
+}
+
+function estimateTokens(characters) {
+  return Math.max(0, Math.ceil(Math.max(0, characters) / 4));
+}
+
+async function recordUsage(admin, details) {
+  if (!admin || !details?.subjectKey) return;
+  const { error } = await admin.from("usage_events").insert({
+    user_id: details.userId || null,
+    subject_key: details.subjectKey,
+    provider: details.provider,
+    model: details.model,
+    status: details.status,
+    input_characters: details.inputCharacters || 0,
+    output_characters: details.outputCharacters || 0,
+    input_tokens_estimate: estimateTokens(details.inputCharacters || 0),
+    output_tokens_estimate: estimateTokens(details.outputCharacters || 0),
+    prompt_tokens: Number.isFinite(details.promptTokens) ? details.promptTokens : null,
+    completion_tokens: Number.isFinite(details.completionTokens) ? details.completionTokens : null,
+    reported_cost_usd: Number.isFinite(details.reportedCostUsd) ? details.reportedCostUsd : null
+  });
+  if (error) console.error("Yaza usage logging error:", error.message);
+}
+
+async function prepareQuota(req, provider, model) {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !anonKey || !serviceKey) throw new Error("Usage controls are not configured. Please contact the Yaza administrator.");
+  const authClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const authorization = req.headers.authorization || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  let userId = null;
+  if (token) {
+    const { data, error } = await authClient.auth.getUser(token);
+    if (error || !data?.user) {
+      const error = new Error("Your session has expired. Sign in again to continue.");
+      error.status = 401;
+      throw error;
+    }
+    userId = data.user.id;
+  }
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const ip = forwarded || req.socket?.remoteAddress || "unknown-guest";
+  const identity = userId ? "user:" + userId : "guest:" + ip;
+  const subjectKey = createHash("sha256").update(process.env.SUPABASE_SERVICE_ROLE_KEY + ":" + identity).digest("hex");
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const limits = quotaSettings();
+  const dailyLimit = userId ? limits.daily : limits.guestDaily;
+  const { data, error } = await admin.rpc("consume_yaza_quota", {
+    p_subject_key: subjectKey,
+    p_daily_limit: dailyLimit,
+    p_monthly_limit: userId ? limits.monthly : limits.guestDaily * 30
+  });
+  if (error) {
+    console.error("Yaza quota check error:", error.message);
+    throw new Error("Yaza usage controls are temporarily unavailable. Please try again shortly.");
+  }
+  const quota = Array.isArray(data) ? data[0] : data;
+  if (!quota?.allowed) {
+    const error = new Error(!userId
+      ? `Guest limit reached (${dailyLimit} requests per day). Sign in for a higher Yaza usage allowance.`
+      : `Your Yaza usage limit has been reached (${dailyLimit} requests per day or ${limits.monthly} per month). Please try again after the limit resets.`);
+    error.status = 429;
+    error.quota = { dailyUsed: quota?.daily_used || dailyLimit, dailyLimit, monthlyUsed: quota?.monthly_used || 0, monthlyLimit: userId ? limits.monthly : limits.guestDaily * 30 };
+    throw error;
+  }
+  return { admin, userId, subjectKey, limits, dailyUsed: quota.daily_used, monthlyUsed: quota.monthly_used };
 }
 
 export default async function handler(req, res) {
@@ -81,6 +165,28 @@ export default async function handler(req, res) {
 
   const model = typeof req.body?.model === "string" && req.body.model.length < 120
     ? req.body.model : config.model;
+  let quotaContext;
+  try {
+    quotaContext = await prepareQuota(req, provider, model);
+  } catch (error) {
+    return res.status(error.status || 503).json({ error: error.message, quota: error.quota || undefined });
+  }
+  const inputCharacters = messages.reduce((sum, item) => sum + item.content.length, 0)
+    + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0)
+    + attachments.filter(file => file.kind === "image" && typeof file.data === "string").reduce((sum, file) => sum + Math.ceil(file.data.length * 0.75), 0);
+  let outputCharacters = 0;
+  let promptTokens = null;
+  let completionTokens = null;
+  let reportedCostUsd = null;
+  let usageRecorded = false;
+  const saveUsage = async status => {
+    if (usageRecorded) return;
+    usageRecorded = true;
+    await recordUsage(quotaContext.admin, {
+      userId: quotaContext.userId, subjectKey: quotaContext.subjectKey, provider, model, status,
+      inputCharacters, outputCharacters, promptTokens, completionTokens, reportedCostUsd
+    });
+  };
   const memories = Array.isArray(req.body?.memories)
     ? req.body.memories.filter(item => typeof item === "string" && item.trim()).slice(0, 30).map(item => item.trim().slice(0, 500))
     : [];
@@ -141,7 +247,8 @@ export default async function handler(req, res) {
           ...providerMessages
         ],
         temperature: 0.7,
-        stream: true
+        stream: true,
+        ...(provider === "kimi" ? {} : { stream_options: { include_usage: true } })
       });
     }
 
@@ -158,19 +265,30 @@ export default async function handler(req, res) {
         streamError.status = chunk.error.code || chunk.error.status;
         throw streamError;
       }
+      if (provider === "gemini" && chunk.usageMetadata) {
+        promptTokens = Number.isFinite(chunk.usageMetadata.promptTokenCount) ? chunk.usageMetadata.promptTokenCount : promptTokens;
+        completionTokens = Number.isFinite(chunk.usageMetadata.candidatesTokenCount) ? chunk.usageMetadata.candidatesTokenCount : completionTokens;
+      } else if (chunk.usage) {
+        promptTokens = Number.isFinite(chunk.usage.prompt_tokens) ? chunk.usage.prompt_tokens : promptTokens;
+        completionTokens = Number.isFinite(chunk.usage.completion_tokens) ? chunk.usage.completion_tokens : completionTokens;
+        if (Number.isFinite(chunk.usage.cost)) reportedCostUsd = chunk.usage.cost;
+      }
       const delta = provider === "gemini"
         ? (chunk.text || "")
         : (chunk.choices?.[0]?.delta?.content || "");
       if (typeof delta === "string" && delta) {
         hasContent = true;
+        outputCharacters += delta.length;
         sendEvent(res, { delta });
       }
     }
 
     if (!hasContent) sendEvent(res, { error: "The model returned an empty response. Please try again." });
     else sendEvent(res, { done: true, provider, model });
+    await saveUsage(hasContent ? "completed" : "failed");
     return res.end();
   } catch (error) {
+    if (quotaContext) await saveUsage("failed");
     const message = providerError(error);
     if (res.headersSent) {
       sendEvent(res, { error: message });
