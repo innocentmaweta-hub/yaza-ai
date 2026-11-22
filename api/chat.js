@@ -187,7 +187,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed." });
   }
 
-  const requestedProvider = String(req.body?.provider || "openai").toLowerCase();
+  const requestedProvider = String(req.body?.provider || "yaza").toLowerCase();
   let provider = requestedProvider;
   let model = typeof req.body?.model === "string" && req.body.model.length < 120
     ? req.body.model : "";
