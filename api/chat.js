@@ -8,6 +8,13 @@ const PROVIDERS = {
   kimi: { key: "KIMI_API_KEY", model: process.env.KIMI_MODEL || "moonshot-v1-8k" }
 };
 
+const ALLOWED_MODELS = {
+  openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+  openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
+  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+};
+
 function cleanMessages(messages) {
   if (!Array.isArray(messages)) return [];
   return messages.slice(-30).filter(m =>
@@ -48,7 +55,7 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(503).json({ error: `${provider} is not configured yet. Add ${config.key} in your deployment environment.` });
 
   const messages = cleanMessages(req.body?.messages);
-  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, 10) : [];
+  if (Array.isArray(req.body?.attachments) && req.body.attachments.length > 10) {\n    return res.status(400).json({ error: "Attach no more than 10 files or scanned pages at once." });\n  }\n  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
   if (attachments.filter(file => file?.kind === "image").length > 10) {
     return res.status(400).json({ error: "Too many image pages. Attach fewer scanned pages and try again." });
   }
