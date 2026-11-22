@@ -341,6 +341,14 @@ function App() {
         if (file.size > 1024 * 1024) throw new Error(`${file.name} is larger than 1 MB. Please choose a smaller text file.`);
         return { id, name: file.name, type: file.type || "text/plain", kind: "text", text: (await file.text()).slice(0, 100000), file };
       }));
+      const imagePayloadBytes = [...attachments, ...loaded].reduce((total, item) => {
+        const directImageBytes = item.kind === "image" && item.data ? Math.ceil(item.data.length * 0.75) : 0;
+        const scannedPageBytes = (item.ocrImages || []).reduce((sum, page) => sum + Math.ceil(page.data.length * 0.75), 0);
+        return total + directImageBytes + scannedPageBytes;
+      }, 0);
+      if (imagePayloadBytes > 2.8 * 1024 * 1024) {
+        throw new Error("The combined images and scanned PDF pages exceed 2.8 MB. Attach fewer scanned pages or smaller images.");
+      }
       setAttachments(old => [...old, ...loaded].slice(0, 5));
       setNotice("");
     } catch (error) { setNotice(error.message || "Could not read the selected file."); }
