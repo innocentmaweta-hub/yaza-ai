@@ -226,7 +226,7 @@ function App() {
             const content = await page.getTextContent();
             pages.push(content.items.map(item => item.str || "").join(" "));
           }
-          const extracted = pages.join("\\n\\n").slice(0, 100000);
+          const extracted = pages.join("\n\n").slice(0, 100000);
           if (!extracted.trim()) throw new Error(`${file.name} has no extractable text. Scanned PDFs need OCR, which is not available yet.`);
           return { id, name: file.name, type: "application/pdf", kind: "text", text: extracted, file };
         }
@@ -314,10 +314,10 @@ function App() {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\\n\\n");
+        const events = buffer.split("\n\n");
         buffer = events.pop() || "";
         for (const event of events) {
-          const line = event.split("\\n").find(part => part.startsWith("data: "));
+          const line = event.split("\n").find(part => part.startsWith("data: "));
           if (!line) continue;
           const payload = JSON.parse(line.slice(6));
           if (payload.delta) {
