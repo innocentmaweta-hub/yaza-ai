@@ -15,8 +15,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 const PROVIDERS = {
   openai: { label: "OpenAI", models: [{ id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
   gemini: { label: "Gemini", models: [{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }] },
-  openrouter: { label: "OpenRouter", models: [{ id: "openrouter/free", label: "Free model (automatic)" }] },
+  openrouter: { label: "OpenRouter (free)", models: [{ id: "openrouter/free", label: "Free model (automatic)" }] },
   kimi: { label: "Kimi", models: [{ id: "moonshot-v1-8k", label: "Kimi 8K" }, { id: "moonshot-v1-32k", label: "Kimi 32K" }, { id: "moonshot-v1-128k", label: "Kimi 128K" }] },
+  claude: { label: "Claude", models: [{ id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" }, { id: "claude-opus-5-5", label: "Claude Opus 5.5" }, { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" }] },
+  deepseek: { label: "DeepSeek", models: [{ id: "deepseek-flash", label: "DeepSeek Flash" }, { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" }] },
   yaza: { label: "Yaza AI", models: [{ id: "wachabe", label: "Wachabe" }] }
 };
 const STORAGE = "yaza-ai-conversations-v1";
