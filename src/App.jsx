@@ -976,19 +976,17 @@ function App() {
           "Content-Type": "application/json",
           Authorization: "Bearer " + session.access_token
         },
-        body: JSON.stringify({ prompt: content })
+        body: JSON.stringify({ prompt: content, chat_id: chat.id, message_id: assistantMessageId })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Image generation failed.");
-      if (!data.image || typeof data.image !== "string" || !data.image.startsWith("data:image/")) throw new Error("The image provider returned no usable image.");
-      const blob = await fetch(data.image).then(result => result.blob());
-      const fileId = crypto.randomUUID();
-      const fileName = `yaza-image-${new Date().toISOString().replace(/[:.]/g, "-")}.${blob.type.includes("jpeg") ? "jpg" : blob.type.includes("webp") ? "webp" : "png"}`;
-      const path = `${session.user.id}/${chat.id}/${assistantMessageId}/${fileId}-${fileName}`;
-      const { error: uploadError } = await supabase.storage.from("chat-attachments").upload(path, blob, { contentType: blob.type || "image/png", upsert: false });
-      if (uploadError) throw new Error(`The image was generated, but permanent storage failed: ${uploadError.message}`);
-      const attachment = { id: fileId, name: fileName, type: blob.type || "image/png", kind: "image", path };
-      updateChat(chat.id, current => ({ ...current, messages: current.messages.map(message => message.id === assistantMessageId ? { ...message, content: data.cost != null ? `Image created successfully. Generation cost: ${Number(data.cost).toFixed(4)}.` : "Image created successfully.", attachments: [attachment], model: data.model || "OpenRouter image model", streaming: false } : message) }));
+      if (!response.ok) {
+        if (response.status === 402) { setSettingsOpen(true); setSettingsTab("billing"); loadWallet(); }
+        throw new Error(data.error || "Image generation failed.");
+      }
+      if (!data.attachment?.path) throw new Error("The generated image was not saved to your account.");
+      const attachment = data.attachment;
+      const walletCharge = (Number(data.billedAmountMinor || 0) / 100).toFixed(2);
+      updateChat(chat.id, current => ({ ...current, messages: current.messages.map(message => message.id === assistantMessageId ? { ...message, content: `Image created successfully. Wallet charge: MK ${walletCharge}.`, attachments: [attachment], model: data.model || "OpenRouter image model", streaming: false } : message) }));
       setImageMode(false);
     } catch (error) {
       updateChat(chat.id, current => ({ ...current, messages: current.messages.filter(message => message.id !== assistantMessageId) }));
