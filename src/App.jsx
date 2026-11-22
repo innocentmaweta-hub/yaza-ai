@@ -480,19 +480,30 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const txRef = params.get("tx_ref");
-    if (params.get("payment") === "return" && txRef && session?.access_token) {
-      let alive = true;
-      (async () => {
-        try {
-          const response = await fetch("/api/payments/verify", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + session.access_token }, body:JSON.stringify({ tx_ref:txRef }) });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(data.error || "Could not verify the PayChangu payment.");
-          if (alive) { setSettingsOpen(true); setSettingsTab("billing"); setNotice(data.status==="success" ? "Your Yaza wallet top-up has been confirmed." : data.status==="pending" ? "PayChangu is still processing your payment. Refresh your wallet shortly." : "The payment was not completed."); await loadWallet(); }
-        } catch (error) { if (alive) { setSettingsOpen(true); setSettingsTab("billing"); setWalletError(error.message || "Payment verification failed."); } }
-        finally { const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete("payment"); cleanUrl.searchParams.delete("tx_ref"); cleanUrl.searchParams.delete("status"); window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash); }
-      })();
-      return () => { alive = false; };
-    }
+    if (params.get("payment") !== "return" || !txRef || !session?.access_token) return;
+    let alive = true;
+    (async () => {
+      try {
+        const response = await fetch("/api/payments/verify", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + session.access_token }, body:JSON.stringify({ tx_ref:txRef }) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Could not verify the PayChangu payment.");
+        if (alive) {
+          setSettingsOpen(true); setSettingsTab("billing");
+          setNotice(data.status==="success" ? "Your Yaza wallet top-up has been confirmed." : data.status==="pending" ? "PayChangu is still processing your payment. Refresh your wallet shortly." : "The payment was not completed.");
+          await loadWallet();
+        }
+      } catch (error) {
+        if (alive) { setSettingsOpen(true); setSettingsTab("billing"); setWalletError(error.message || "Payment verification failed."); }
+      } finally {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("payment"); cleanUrl.searchParams.delete("tx_ref"); cleanUrl.searchParams.delete("status");
+        window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+      }
+    })();
+    return () => { alive = false; };
+  }, [session?.access_token]);
+
+  useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("share");
     if (!token) return;
     let alive = true;
