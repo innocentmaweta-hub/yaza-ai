@@ -48,7 +48,19 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(503).json({ error: `${provider} is not configured yet. Add ${config.key} in your deployment environment.` });
 
   const messages = cleanMessages(req.body?.messages);
-  if (!messages.length || messages[messages.length - 1].role !== "user") {
+  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, 5) : [];
+  for (const file of attachments) {
+    if (!file || typeof file.name !== "string" || file.name.length > 180) {
+      return res.status(400).json({ error: "One of the attached files is invalid." });
+    }
+    if (file.kind === "image" && (typeof file.data !== "string" || !/^data:image\\/(png|jpeg|jpg|webp|gif);base64,/i.test(file.data))) {
+      return res.status(400).json({ error: `The image ${file.name} has an unsupported format. Use PNG, JPG, WEBP or GIF.` });
+    }
+    if (file.kind === "text" && (typeof file.text !== "string" || file.text.length > 1_000_000)) {
+      return res.status(400).json({ error: `The text file ${file.name} is too large or unreadable.` });
+    }
+  }
+  if ((!messages.length && !attachments.length) || (messages.length && messages[messages.length - 1].role !== "user")) {
     return res.status(400).json({ error: "Please send a message first." });
   }
 
@@ -69,7 +81,17 @@ export default async function handler(req, res) {
         history,
         config: { systemInstruction: "You are Yaza AI, a helpful, thoughtful, and capable AI assistant. Be clear, accurate, and honest about uncertainty." }
       });
-      stream = await chat.sendMessageStream({ message: messages[messages.length - 1].content });
+      const lastText = messages[messages.length - 1]?.content || "Please review the attached files.";
+      const parts = [{ text: lastText }];
+      for (const file of attachments) {
+        if (file.kind === "image") {
+          const match = file.data.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) parts.push({ inlineData: { mimeType: match[1], data: match[2] } });
+        } else if (file.kind === "text") {
+          parts.push({ text: `\\n\\n--- Attached file: ${file.name} ---\\n${file.text}\\n--- End of ${file.name} ---` });
+        }
+      }
+      stream = await chat.sendMessageStream({ message: parts });
     } else {
       const options = { apiKey };
       if (provider === "openrouter") {
@@ -81,11 +103,20 @@ export default async function handler(req, res) {
       }
       if (provider === "kimi") options.baseURL = "https://api.moonshot.ai/v1";
       client = new OpenAI(options);
+      const providerMessages = messages.map((message, index) => {
+        if (index !== messages.length - 1 || !attachments.length) return message;
+        const content = [{ type: "text", text: message.content }];
+        for (const file of attachments) {
+          if (file.kind === "image") content.push({ type: "image_url", image_url: { url: file.data } });
+          else if (file.kind === "text") content.push({ type: "text", text: `\\n\\n--- Attached file: ${file.name} ---\\n${file.text}\\n--- End of ${file.name} ---` });
+        }
+        return { role: message.role, content };
+      });
       stream = await client.chat.completions.create({
         model,
         messages: [
           { role: "system", content: "You are Yaza AI, a helpful, thoughtful, and capable AI assistant. Be clear, accurate, and honest about uncertainty." },
-          ...messages
+          ...providerMessages
         ],
         temperature: 0.7,
         stream: true
