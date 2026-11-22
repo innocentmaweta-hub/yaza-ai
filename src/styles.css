@@ -465,3 +465,25 @@
 .theme-light .wallet-history-heading button{border-color:#dedfe5;color:#626572}
 .theme-light .admin-pricing-card input:not([type="checkbox"]){background:#fff;border-color:#d9dae1;color:#33343c}
 @media(max-width:560px){.admin-pricing-card{grid-template-columns:1fr}.wallet-history-item{align-items:flex-start;flex-direction:column}.wallet-history-item>strong{align-self:flex-end}}
+
+
+/* Mobile viewport and safe-area refinements */
+@supports (height: 100dvh) {
+  .app-shell { height: 100dvh; }
+}
+@media (max-width: 760px) {
+  .app-shell { min-height: 0; }
+  .topbar {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .composer-area {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  .auth-backdrop {
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(12px, env(safe-area-inset-left));
+  }
+}
