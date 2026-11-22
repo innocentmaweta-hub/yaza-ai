@@ -188,7 +188,7 @@ function App() {
         id: row.id, title: row.title, isArchived: row.is_archived === true, updatedAt: new Date(row.updated_at).getTime(),
         messages: messageRows.filter(m => m.conversation_id === row.id).map(m => ({ id: m.id, role: m.role, content: m.content, provider: m.provider, model: m.model, attachments: m.attachments || [] }))
       }));
-      if (remoteChats.length) { setChats(remoteChats); setActiveId(remoteChats[0].id); }
+      if (remoteChats.length) { setChats(remoteChats); setActiveId((remoteChats.find(chat => !chat.isArchived) || remoteChats[0]).id); }
       setCloudStatus("Synced");
     } catch (error) {
       console.error("Yaza cloud history:", error);
@@ -606,6 +606,13 @@ function App() {
     const chat = chats.find(item => item.id === id);
     if (!chat || !window.confirm(`Delete "${chat.title}" permanently? This also deletes its saved messages.`)) return;
     if (supabase && session?.user) {
+      const attachmentPaths = [...new Set((chat.messages || []).flatMap(message =>
+        (message.attachments || []).map(attachment => attachment.path).filter(Boolean)
+      ))];
+      if (attachmentPaths.length) {
+        const { error: storageError } = await supabase.storage.from("chat-attachments").remove(attachmentPaths);
+        if (storageError) { setNotice(storageError.message || "Could not remove this conversation's saved attachments."); return; }
+      }
       const { error } = await supabase.from("conversations").delete().eq("id", id).eq("user_id", session.user.id);
       if (error) { setNotice(error.message || "Could not delete this conversation from your account."); return; }
     }
