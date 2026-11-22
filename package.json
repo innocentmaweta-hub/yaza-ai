@@ -14,7 +14,9 @@
     "openai": "^6.38.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@supabase/supabase-js": "^2.57.4"
+    "@supabase/supabase-js": "^2.57.4",
+    "pdfjs-dist": "4.10.38",
+    "mammoth": "1.9.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
