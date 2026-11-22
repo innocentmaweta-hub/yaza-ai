@@ -19,3 +19,12 @@
 .auth-submit:disabled { opacity:.6; cursor:wait; }
 .auth-switch { margin-top:20px; color:#a5a6ae; text-align:center; font-size:13px; }
 .auth-switch button { border:0; color:#efa17f; background:none; font:inherit; font-weight:700; cursor:pointer; }
+
+/* Chat attachments */
+.attachment-list{display:flex;flex-wrap:wrap;gap:7px;padding:0 2px 10px}
+.attachment-chip,.sent-attachment{display:inline-flex;align-items:center;gap:7px;max-width:230px;padding:7px 9px;border:1px solid #41424c;border-radius:9px;background:#292a31;color:#d7d7de;font-size:10px}
+.attachment-icon{display:grid;place-items:center;color:#e6a07f}
+.attachment-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attachment-chip button{display:grid;place-items:center;border:0;background:transparent;color:#999aa4;padding:2px}
+.sent-attachments{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}
+.sent-attachment{max-width:260px;padding:6px 8px;background:#24252c;color:#bfc0c8}
