@@ -32,6 +32,10 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(503).json({ error: "Image generation is not configured. Add OPENROUTER_API_KEY in Vercel and redeploy." });
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim().slice(0, 4000) : "";
   if (prompt.length < 3) return res.status(400).json({ error: "Describe the image you want to create." });
+  const chatId = String(req.body?.chat_id || "");
+  const messageId = String(req.body?.message_id || "");
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(chatId) || !uuidPattern.test(messageId)) return res.status(400).json({ error: "The image conversation reference is invalid. Refresh and try again." });
   const model = process.env.OPENROUTER_IMAGE_MODEL || "bytedance-seed/seedream-4.5";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) return res.status(503).json({ error: "Wallet billing is not configured." });
