@@ -63,10 +63,19 @@ export default async function handler(req, res) {
           .order("created_at", { ascending: true }).limit(500);
         if (messagesError) throw messagesError;
         if (!messages?.length) return reply(res, 400, { error: "Add at least one message before sharing this conversation." });
-        const snapshot = messages.map(message => ({
-          id: message.id, role: message.role, content: String(message.content || "").slice(0, 20000),
-          createdAt: message.created_at
-        }));
+        const snapshot = messages.map(message => {
+          if (!["user", "assistant"].includes(message.role)) {
+            throw new Error("This conversation contains an unsupported message type and cannot be shared.");
+          }
+          return {
+            id: message.id, role: message.role, content: String(message.content || "").slice(0, 20000),
+            createdAt: message.created_at
+          };
+        });
+        const snapshotBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8");
+        if (snapshotBytes > 1_000_000) {
+          return reply(res, 413, { error: "This conversation is too large to share. Try sharing a shorter conversation." });
+        }
         const token = randomBytes(32).toString("hex");
         const tokenHash = createHash("sha256").update(token).digest("hex");
         const { error: insertError } = await admin.from("conversation_shares").insert({
