@@ -390,3 +390,14 @@
 .usage-model-list span{color:var(--yaza-muted,#92939e);overflow-wrap:anywhere}
 .usage-model-list strong{white-space:nowrap;color:var(--yaza-text,#ececf0)}
 @media(max-width:520px){.usage-stat-grid{grid-template-columns:1fr 1fr}.usage-stat strong{font-size:15px}}
+
+
+.usage-admin-table{overflow-x:auto}
+.usage-admin-table .admin-table-row{min-width:560px;grid-template-columns:.8fr 1.5fr .65fr .9fr}
+.usage-admin-table .admin-table-row>*:last-child{text-align:right}
+.theme-light .usage-stat{background:#fff;border-color:#e2e3e8}
+.theme-light .usage-stat span,.theme-light .usage-model-list span{color:#70737e}
+.theme-light .usage-stat strong,.theme-light .usage-model-list strong{color:#292a31}
+.theme-light .usage-model-list{border-color:#e2e3e8}
+.theme-light .usage-model-list>div{border-color:#e2e3e8}
+.theme-light .usage-track{background:#e6e6eb}
