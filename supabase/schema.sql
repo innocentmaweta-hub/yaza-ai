@@ -140,3 +140,81 @@ create policy "Users manage their own conversation shares" on public.conversatio
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
 grant select, insert, update, delete on public.conversation_shares to authenticated, service_role;
+
+
+-- Private server-side request quotas and usage metering.
+create table if not exists public.usage_counters (
+  subject_key text not null check (char_length(subject_key) = 64),
+  period_type text not null check (period_type in ('day','month')),
+  period_start date not null,
+  request_count integer not null default 0 check (request_count >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (subject_key, period_type, period_start)
+);
+alter table public.usage_counters enable row level security;
+revoke all on public.usage_counters from anon, authenticated;
+grant select, insert, update, delete on public.usage_counters to service_role;
+
+create table if not exists public.usage_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  subject_key text not null check (char_length(subject_key) = 64),
+  provider text not null,
+  model text not null,
+  status text not null check (status in ('completed','failed')),
+  input_characters integer not null default 0,
+  output_characters integer not null default 0,
+  input_tokens_estimate integer not null default 0,
+  output_tokens_estimate integer not null default 0,
+  prompt_tokens integer,
+  completion_tokens integer,
+  reported_cost_usd numeric(14,8),
+  created_at timestamptz not null default now()
+);
+create index if not exists usage_events_created_idx on public.usage_events(created_at desc);
+create index if not exists usage_events_provider_model_created_idx on public.usage_events(provider, model, created_at desc);
+create index if not exists usage_events_user_created_idx on public.usage_events(user_id, created_at desc);
+alter table public.usage_events enable row level security;
+revoke all on public.usage_events from anon, authenticated;
+grant select, insert, update, delete on public.usage_events to service_role;
+
+create or replace function public.consume_yaza_quota(
+  p_subject_key text,
+  p_daily_limit integer,
+  p_monthly_limit integer
+)
+returns table(allowed boolean, daily_used integer, monthly_used integer)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_today date := (now() at time zone 'utc')::date;
+  v_month date := date_trunc('month', now() at time zone 'utc')::date;
+  v_daily integer;
+  v_monthly integer;
+begin
+  if p_subject_key is null or char_length(p_subject_key) <> 64
+     or p_daily_limit < 1 or p_monthly_limit < 1 then
+    raise exception 'Invalid quota arguments';
+  end if;
+  insert into public.usage_counters(subject_key, period_type, period_start)
+  values (p_subject_key, 'day', v_today), (p_subject_key, 'month', v_month)
+  on conflict do nothing;
+  select request_count into v_daily from public.usage_counters
+  where subject_key = p_subject_key and period_type = 'day' and period_start = v_today for update;
+  select request_count into v_monthly from public.usage_counters
+  where subject_key = p_subject_key and period_type = 'month' and period_start = v_month for update;
+  if v_daily >= p_daily_limit or v_monthly >= p_monthly_limit then
+    return query select false, v_daily, v_monthly;
+    return;
+  end if;
+  update public.usage_counters set request_count = request_count + 1, updated_at = now()
+  where subject_key = p_subject_key and period_type = 'day' and period_start = v_today;
+  update public.usage_counters set request_count = request_count + 1, updated_at = now()
+  where subject_key = p_subject_key and period_type = 'month' and period_start = v_month;
+  return query select true, v_daily + 1, v_monthly + 1;
+end;
+$$;
+revoke all on function public.consume_yaza_quota(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_yaza_quota(text, integer, integer) to service_role;
