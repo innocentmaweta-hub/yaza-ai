@@ -311,6 +311,8 @@ insert into public.model_pricing(model_key,enabled,pricing_mode) values
  ('openrouter/google/gemini-3.7-flash',false,'tokens'),('openrouter/openai/gpt-4.1',false,'tokens'),
  ('openrouter/deepseek/deepseek-r1',false,'tokens'),('openrouter/anthropic/claude-sonnet-4',false,'tokens'),
  ('kimi/moonshot-v1-8k',false,'tokens'),('kimi/moonshot-v1-32k',false,'tokens'),('kimi/moonshot-v1-128k',false,'tokens'),
+ ('claude/claude-sonnet-5-5',false,'tokens'),('claude/claude-opus-5-5',false,'tokens'),('claude/claude-haiku-5-5',false,'tokens'),
+ ('deepseek/deepseek-flash',false,'tokens'),('deepseek/deepseek-v4-pro',false,'tokens'),
  ('yaza/wachabe',false,'tokens')
 on conflict(model_key) do nothing;
 
