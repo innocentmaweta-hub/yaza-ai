@@ -507,3 +507,15 @@
  .admin-page .admin-table-row{min-width:480px}
  .admin-page .usage-user-table .admin-table-row{min-width:680px}
 }
+
+
+/* Conversation mode picker */
+.mode-picker-wrap{position:relative}
+.mode-picker{color:#d6c0b5;border-color:#57413b}
+.mode-picker>span{white-space:nowrap}
+.mode-dropdown{top:auto;bottom:38px;left:0;min-width:258px;padding:7px}
+.mode-dropdown button{min-height:48px;height:auto;justify-content:space-between;padding:8px 10px}
+.mode-dropdown button>span{display:grid;gap:3px;min-width:0}
+.mode-dropdown button strong{font-size:12px;font-weight:650}
+.mode-dropdown button small{font-size:10px;line-height:1.4;color:#9697a1;white-space:normal}
+@media(max-width:760px){.mode-picker.tool-label span{display:inline;max-width:76px;overflow:hidden;text-overflow:ellipsis}.mode-dropdown{min-width:244px}.composer-tools{gap:4px}}
