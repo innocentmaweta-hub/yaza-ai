@@ -254,12 +254,13 @@ function App() {
         await loadCloudChats(data.session.user.id);
         await loadCloudMemories();
         await checkAdminAccess(data.session);
+        await loadWallet();
       } else setCloudReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession || null);
       if (!nextSession) { setPreferencesReady(false); setPreferencesStatus("This browser"); setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); setUsageData(null); setUsageError(""); setWalletData(null); setWalletError(""); }
-      else { setPreferencesReady(false); setCloudReady(false); setTimeout(async () => { await loadCloudPreferences(nextSession.user.id); await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); }, 0); }
+      else { setPreferencesReady(false); setCloudReady(false); setTimeout(async () => { await loadCloudPreferences(nextSession.user.id); await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); await loadWallet(); }, 0); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
@@ -1150,6 +1151,11 @@ function App() {
         {!visibleChats.length && <p className="empty-search">{search ? "No conversations match your search" : showArchivedChats ? "No archived conversations" : "No conversations yet"}</p>}
       </div>
       <div className="side-bottom">
+        <button type="button" className="wallet-promo-card" onClick={() => { if (!session?.access_token) { setAuthMode("signin"); setAuthOpen(true); return; } setSettingsOpen(true); setSettingsTab("billing"); loadWallet(); }}>
+          <span className="wallet-promo-meter" role="progressbar" aria-label="Recent wallet usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((() => { const tx=walletData?.transactions || []; const credits=tx.reduce((sum,item)=>sum+Math.max(0,Number(item.amount_minor)||0),0); const debits=tx.reduce((sum,item)=>sum+Math.max(0,-(Number(item.amount_minor)||0)),0); return credits+debits ? debits/(credits+debits)*100 : 0; })())}><i style={{width: ((() => { const tx=walletData?.transactions || []; const credits=tx.reduce((sum,item)=>sum+Math.max(0,Number(item.amount_minor)||0),0); const debits=tx.reduce((sum,item)=>sum+Math.max(0,-(Number(item.amount_minor)||0)),0); return credits+debits ? Math.min(100,debits/(credits+debits)*100) : 0; })()) + "%"}} /></span>
+          <span className="wallet-promo-content"><span className="wallet-promo-icon"><CreditCard size={15}/></span><span className="wallet-promo-copy"><strong>Deposit to wallet</strong><small>{session ? "Balance: MK " + (Number(walletData?.balanceMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2}) + " · Use powerful models" : "Use Airtel Money and Mpamba"}</small></span><ArrowUpRight size={15} className="wallet-promo-arrow"/></span>
+          <span className="wallet-promo-methods">Airtel Money <b>·</b> Mpamba</span>
+        </button>
         <button type="button" className="plan-card explore-plan-card" onClick={() => setExploreOpen(true)}><div className="plan-icon"><Sparkles size={16}/></div><div><strong>Explore Yaza</strong><span>Discover tools, modes and features</span></div><ArrowUp size={16} className="explore-plan-arrow"/></button>
         <div className="account-menu-wrap">
           <button className="profile-row profile-action" aria-expanded={accountMenuOpen} onClick={() => setAccountMenuOpen(value => !value)}>
