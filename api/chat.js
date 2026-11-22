@@ -237,7 +237,7 @@ export default async function handler(req, res) {
     }
     if (file.kind === "image") {
       const match = typeof file.data === "string"
-        ? file.data.match(/^data:image\\/(png|jpeg|jpg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i)
+        ? file.data.match(/^data:image\/(png|jpeg|jpg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i)
         : null;
       if (!match || match[2].length % 4 !== 0) {
         return res.status(400).json({ error: `The image ${file.name} has an unsupported or invalid format. Use PNG, JPG, WEBP or GIF.` });
