@@ -15,11 +15,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 const PROVIDERS = {
   openai: { label: "OpenAI", models: [{ id: "gpt-6.2-astra", label: "GPT-6.2 Astra" }, { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" }, { id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
   gemini: { label: "Gemini", models: [{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }] },
-  openrouter: { label: "OpenRouter (free)", models: [{ id: "openrouter/free", label: "Free model (automatic)" }] },
+  openrouter: { label: "OpenRouter", models: [{ id: "openrouter/free", label: "Auto" }, { id: "~google/gemini-flash-latest", label: "Gemini Flash (latest)" }, { id: "google/gemini-3.7-flash", label: "Gemini 3.7 Flash" }, { id: "openai/gpt-4.1", label: "GPT-4.1" }, { id: "deepseek/deepseek-r1", label: "DeepSeek R1" }, { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" }] },
   kimi: { label: "Kimi", models: [{ id: "moonshot-v1-8k", label: "Kimi 8K" }, { id: "moonshot-v1-32k", label: "Kimi 32K" }, { id: "moonshot-v1-128k", label: "Kimi 128K" }] },
   claude: { label: "Claude", models: [{ id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" }, { id: "claude-opus-5-5", label: "Claude Opus 5.5" }, { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" }] },
   deepseek: { label: "DeepSeek", models: [{ id: "deepseek-flash", label: "DeepSeek Flash" }, { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" }] },
-  yaza: { label: "Yaza AI", models: [{ id: "wachabe", label: "Wachabe" }] }
+  yaza: { label: "Yaza AI", models: [{ id: "wachabe", label: "Wachabe" }, { id: "last-choice", label: "Last choice" }] }
 };
 const STORAGE = "yaza-ai-conversations-v1";
 const CHAT_MODES = {
@@ -188,6 +188,10 @@ function App() {
   const recognitionRef = useRef(null);
   const voiceBasePromptRef = useRef("");
   const [notice, setNotice] = useState("");
+  const [usageChoiceOpen, setUsageChoiceOpen] = useState(false);
+  const [usageChoicePending, setUsageChoicePending] = useState(null);
+  const [usageChoiceReason, setUsageChoiceReason] = useState("");
+  const [paidAccessConfirmed, setPaidAccessConfirmed] = useState(() => { try { return sessionStorage.getItem("yaza-paid-access-confirmed") === "1"; } catch { return false; } });
   const [shareOpen, setShareOpen] = useState(false);
   const [exploreOpen, setExploreOpen] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
@@ -724,10 +728,19 @@ function App() {
     else window.location.href = data.signedUrl;
   }
 
-  async function sendMessage(text = prompt, replaceMessageId = null) {
+  async function sendMessage(text = prompt, replaceMessageId = null, routeOverride = null) {
     const content = text.trim();
+    const requestProvider = routeOverride?.provider || provider;
+    const requestModel = routeOverride?.model || model;
     if ((!content && !attachments.length) || sending) return;
     if (!session?.user) { setNotice("Sign in to use Yaza AI. Paid model access requires a wallet."); setAuthMode("signin"); setAuthOpen(true); return; }
+    const isPaidRequest = requestProvider !== "yaza" && !(requestProvider === "openrouter" && requestModel === "openrouter/free");
+    if (isPaidRequest && !paidAccessConfirmed) {
+      setUsageChoicePending({ text: content, replaceMessageId });
+      setUsageChoiceReason("This model uses paid wallet usage. Choose whether to add funds or continue with Last choice.");
+      setUsageChoiceOpen(true);
+      return;
+    }
     const pendingAttachments = attachments;
     const messageContent = content || "Please review the attached file(s).";
     if (pendingAttachments.length && (!supabase || !session?.user)) {
@@ -738,12 +751,14 @@ function App() {
     if (!chat) { chat = makeChat(); setChats([chat]); setActiveId(chat.id); }
     const chatMode = validChatMode(chat.mode);
     const userMessageId = replaceMessageId || crypto.randomUUID();
-    const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, mode: chatMode, streaming: true };
+    const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider: requestProvider, model: requestModel, mode: chatMode, streaming: true };
     setPrompt("");
     setAttachments([]);
     setSending(true);
     setNotice("");
     let userMessage;
+    let savedAttachments = [];
+    let usageChoiceRequired = false;
     try {
       let webContext = "";
       let webSources = [];
@@ -760,7 +775,7 @@ function App() {
           webContext = "\n\nUse the following live web search results to answer the user's request. Cite relevant claims with [1], [2], etc. Do not invent facts beyond these results.\n\n" + webSources.map((item, index) => `[${index + 1}] ${item.title}\nURL: ${item.url}\nSummary: ${item.content}`).join("\n\n");
         } else webContext = "\n\nThe web search returned no results. Say so clearly and do not pretend you searched successfully.";
       }
-      const savedAttachments = [];
+      savedAttachments = [];
       for (const file of pendingAttachments) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "attachment";
         const path = `${session.user.id}/${chat.id}/${userMessageId}/${file.id}-${safeName}`;
@@ -793,7 +808,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: "Bearer " + session.access_token } : {}) },
         body: JSON.stringify({
-          provider, model, mode: chatMode,
+          provider: requestProvider, model: requestModel, mode: chatMode,
           memories: memories.map(item => item.content),
           messages: nextMessages.map((message, index) => ({ role: message.role, content: index === nextMessages.length - 1 ? message.content + webContext : message.content })),
           attachments: pendingAttachments.flatMap(({ name, type, kind, data, text, ocrImages }) => [
@@ -804,7 +819,14 @@ function App() {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        if (response.status === 402) { setSettingsOpen(true); setSettingsTab("billing"); loadWallet(); }
+        if (response.status === 402 || response.status === 429) {
+          usageChoiceRequired = true;
+          setUsageChoicePending({ text: content, replaceMessageId: null });
+          setUsageChoiceReason(response.status === 402
+            ? "Your wallet does not have enough usage for this request."
+            : "Your included Yaza usage limit has been reached.");
+          setUsageChoiceOpen(true);
+        }
         throw new Error(data.error || "Something went wrong.");
       }
       if (!response.body) throw new Error("Streaming is not supported by this browser. Please refresh and try again.");
@@ -839,20 +861,29 @@ function App() {
       if (answer) {
         const sourceList = webSearchEnabled && webSources.length ? "\n\nSources\n" + webSources.map((item, index) => `[${index + 1}] ${item.title} — ${item.url}`).join("\n") : "";
         answer += sourceList;
-        updateChat(chat.id, c => ({ ...c, messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer, provider, model, streaming: false } : m) }));
+        updateChat(chat.id, c => ({ ...c, messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer, provider: requestProvider, model: requestModel, streaming: false } : m) }));
       } else {
         updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
       }
       if (streamError) setNotice(streamError);
       else if (!completed) setNotice("The response stream ended unexpectedly. Any text received has been kept.");
     } catch (error) {
-      if (userMessage) {
-        updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
+      if (usageChoiceRequired) {
+        updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id && m.id !== userMessageId) }));
+        if (savedAttachments.length && supabase) await supabase.storage.from("chat-attachments").remove(savedAttachments.map(item => item.path)).catch(() => {});
+        setNotice("");
+        setPrompt(content);
+        setAttachments(pendingAttachments);
+      } else {
+        if (userMessage) updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
+        setNotice(error.message || "Unable to send your message.");
+        setPrompt(content);
+        if (!userMessage) setAttachments(pendingAttachments);
       }
-      setNotice(error.message || "Unable to send your message.");
-      setPrompt(content);
-      if (!userMessage) setAttachments(pendingAttachments);
-    } finally { setSending(false); textareaRef.current?.focus(); }
+    } finally {
+      if (isPaidRequest) { setPaidAccessConfirmed(false); try { sessionStorage.removeItem("yaza-paid-access-confirmed"); } catch {} }
+      setSending(false); textareaRef.current?.focus();
+    }
   }
 
   async function createShareLink() {
@@ -1220,6 +1251,7 @@ function App() {
           <p className="explore-dialog-footnote">Choose a mode or tool to jump straight into a new way of working with Yaza.</p>
         </section>
       </div>}
+      {usageChoiceOpen && <div className="modal-backdrop usage-choice-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setUsageChoiceOpen(false); }}><section className="usage-choice-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-choice-title"><button className="modal-close" onClick={() => setUsageChoiceOpen(false)} aria-label="Close"><X size={17}/></button><div className="usage-choice-icon"><Zap size={20}/></div><h2 id="usage-choice-title">Choose how to continue</h2><p>{usageChoiceReason || "Your included usage has ended or this request needs paid model usage."}</p><div className="usage-choice-actions"><button type="button" className="usage-choice-wallet" onClick={() => { setUsageChoiceOpen(false); setPaidAccessConfirmed(true); try { sessionStorage.setItem("yaza-paid-access-confirmed", "1"); } catch {} setSettingsOpen(true); setSettingsTab("billing"); loadWallet(); }}>Buy usage</button><button type="button" className="usage-choice-fallback" disabled={sending} onClick={() => { const pending = usageChoicePending; setUsageChoiceOpen(false); setUsageChoicePending(null); setPaidAccessConfirmed(false); try { sessionStorage.removeItem("yaza-paid-access-confirmed"); } catch {} setProvider("yaza"); setModel("last-choice"); if (pending?.text) sendMessage(pending.text, pending.replaceMessageId || null, { provider: "yaza", model: "last-choice" }); }}>Use Last choice</button></div><small>Your prompt stays here. Last choice uses Yaza’s automatic fallback route and does not use your wallet.</small></section></div>}
       {shareOpen && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setShareOpen(false); }}><section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title"><button className="modal-close" onClick={() => setShareOpen(false)} aria-label="Close"><X size={17}/></button><div className="share-dialog-icon"><Share2 size={19}/></div><h2 id="share-dialog-title">Share conversation</h2><p>Create a public, read-only link to this conversation. Anyone with the link can view its text, so only share content you are comfortable making public.</p><div className="share-privacy-note"><Check size={14}/> You can revoke the link at any time. Attachments are not included.</div>{shareUrl && <div className="share-url-row"><input readOnly value={shareUrl} aria-label="Public share link"/><button onClick={copyShareLink} title="Copy link"><Copy size={15}/></button></div>}{shareError && <p className="share-feedback">{shareError}</p>}<div className="share-dialog-actions"><button className="share-revoke-btn" onClick={revokeShareLinks} disabled={shareBusy}>Revoke links</button><button className="share-create-btn" onClick={createShareLink} disabled={shareBusy}>{shareBusy ? "Please wait…" : shareUrl ? "Create another link" : "Create public link"}</button></div></section></div>}
       <section className={`conversation ${isNew ? "welcome" : ""}`}>
         {isNew ? <div className="welcome-content">
