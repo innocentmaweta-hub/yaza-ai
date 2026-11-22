@@ -267,6 +267,21 @@ function App() {
       reader.readAsDataURL(file);
     });
   }
+  async function renderPdfPageForOcr(page) {
+    const viewport = page.getViewport({ scale: 1.35 });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("Your browser could not prepare a scanned PDF page for OCR.");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    const data = canvas.toDataURL("image/jpeg", 0.68);
+    canvas.width = 0;
+    canvas.height = 0;
+    return data;
+  }
   async function addFiles(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
@@ -300,14 +315,22 @@ function App() {
         if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
           const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
           const pages = [];
+          const ocrImages = [];
           for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
             const page = await pdf.getPage(pageNumber);
             const content = await page.getTextContent();
-            pages.push(content.items.map(item => item.str || "").join(" "));
+            const pageText = content.items.map(item => item.str || "").join(" ").trim();
+            if (pageText) {
+              pages.push(`--- Page ${pageNumber} ---\n${pageText}`);
+            } else if (ocrImages.length < 5) {
+              const data = await renderPdfPageForOcr(page);
+              ocrImages.push({ name: `${file.name} — scanned page ${pageNumber}`, type: "image/jpeg", kind: "image", data });
+            }
+            page.cleanup?.();
           }
           const extracted = pages.join("\n\n").slice(0, 100000);
-          if (!extracted.trim()) throw new Error(`${file.name} has no extractable text. Scanned PDFs need OCR, which is not available yet.`);
-          return { id, name: file.name, type: "application/pdf", kind: "text", text: extracted, file };
+          if (!extracted.trim() && !ocrImages.length) throw new Error(`${file.name} does not contain readable text or pages that could be prepared for OCR.`);
+          return { id, name: file.name, type: "application/pdf", kind: "text", text: extracted, ocrImages, file };
         }
         if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || /\.docx$/i.test(file.name)) {
           const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
@@ -397,7 +420,10 @@ function App() {
           provider, model,
           memories: memories.map(item => item.content),
           messages: nextMessages.map((message, index) => ({ role: message.role, content: index === nextMessages.length - 1 ? message.content + webContext : message.content })),
-          attachments: pendingAttachments.map(({ name, type, kind, data, text }) => ({ name, type, kind, data, text }))
+          attachments: pendingAttachments.flatMap(({ name, type, kind, data, text, ocrImages }) => [
+            { name, type, kind, data, text },
+            ...(Array.isArray(ocrImages) ? ocrImages : [])
+          ])
         })
       });
       if (!response.ok) {
@@ -652,7 +678,7 @@ function App() {
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
-        <p className="disclaimer">Images, PDF and Word files supported · Attachments are saved securely to your account · Yaza AI can make mistakes. Check important information.</p>
+        <p className="disclaimer">Images, scanned PDFs, Word files and text documents supported · Scanned pages are read using your selected AI model · Yaza AI can make mistakes. Check important information.</p>
       </footer>
     </main>
 
