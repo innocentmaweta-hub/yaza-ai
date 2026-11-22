@@ -51,6 +51,7 @@ function App() {
   const [providerMenu, setProviderMenu] = useState(false);
   const [modelMenu, setModelMenu] = useState(false);
   const [search, setSearch] = useState("");
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [notice, setNotice] = useState("");
   const [session, setSession] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -294,6 +295,20 @@ function App() {
     setNotice("");
     let userMessage;
     try {
+      let webContext = "";
+      let webSources = [];
+      if (webSearchEnabled) {
+        const searchResponse = await fetch("/api/search", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: content })
+        });
+        const searchData = await searchResponse.json().catch(() => ({}));
+        if (!searchResponse.ok) throw new Error(searchData.error || "Web search failed.");
+        webSources = Array.isArray(searchData.results) ? searchData.results : [];
+        if (webSources.length) {
+          webContext = "\\n\\nUse the following live web search results to answer the user's request. Cite relevant claims with [1], [2], etc. Do not invent facts beyond these results.\\n\\n" + webSources.map((item, index) => `[${index + 1}] ${item.title}\\nURL: ${item.url}\\nSummary: ${item.content}`).join("\\n\\n");
+        } else webContext = "\\n\\nThe web search returned no results. Say so clearly and do not pretend you searched successfully.";
+      }
       const savedAttachments = [];
       for (const file of pendingAttachments) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "attachment";
@@ -319,7 +334,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider, model,
-          messages: nextMessages.map(({ role, content }) => ({ role, content })),
+          messages: nextMessages.map((message, index) => ({ role: message.role, content: index === nextMessages.length - 1 ? message.content + webContext : message.content })),
           attachments: pendingAttachments.map(({ name, type, kind, data, text }) => ({ name, type, kind, data, text }))
         })
       });
@@ -357,6 +372,8 @@ function App() {
         if (payload.done) completed = true;
       }
       if (answer) {
+        const sourceList = webSearchEnabled && webSources.length ? "\\n\\nSources\\n" + webSources.map((item, index) => `[${index + 1}] ${item.title} — ${item.url}`).join("\\n") : "";
+        answer += sourceList;
         updateChat(chat.id, c => ({ ...c, messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer, provider, model, streaming: false } : m) }));
       } else {
         updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
@@ -454,7 +471,7 @@ function App() {
           {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
           <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder="Message Yaza AI..." rows={1} disabled={sending}/>
           <div className="composer-bottom">
-            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Web search is coming in a future update.")}><Globe2 size={15}/> <span>Search</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
+            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
