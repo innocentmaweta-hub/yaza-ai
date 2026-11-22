@@ -17,9 +17,9 @@ const MODEL_LABELS = {
   "kimi/moonshot-v1-8k":"Kimi · 8K","kimi/moonshot-v1-32k":"Kimi · 32K","kimi/moonshot-v1-128k":"Kimi · 128K",
   "claude/claude-sonnet-5-5":"Claude · Sonnet 5.5","claude/claude-opus-5-5":"Claude · Opus 5.5","claude/claude-haiku-5-5":"Claude · Haiku 5.5",
   "deepseek/deepseek-flash":"DeepSeek · Flash","deepseek/deepseek-v4-pro":"DeepSeek · V4 Pro",
-  "yaza/wachabe":"Yaza AI · Wachabe","image/generation":"Image generation · Seedream 4.5"
+  "image/generation":"Image generation · Seedream 4.5"
 };
-const ALLOWED_PRICING_KEYS = new Set([...Object.entries(AVAILABLE_MODELS).flatMap(([provider,models]) => models.map(model => provider + "/" + model)), "yaza/wachabe","image/generation"]);
+const ALLOWED_PRICING_KEYS = new Set([...Object.entries(AVAILABLE_MODELS).flatMap(([provider,models]) => models.map(model => provider + "/" + model)), "image/generation"]);
 
 function reply(res, status, body) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
