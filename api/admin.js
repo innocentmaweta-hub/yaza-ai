@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     const usageByModel = new Map();
     const usageByUser = new Map();
     let todayRequests = 0, monthRequests = 0, estimatedInputTokens = 0, estimatedOutputTokens = 0;
-    let reportedCostUsd = 0, pricedRequests = 0;
+    let reportedCostUsd = 0, monthReportedCostUsd = 0, pricedRequests = 0;
     for (const event of usageRows) {
       const created = new Date(event.created_at);
       if (created >= todayStart) todayRequests++;
@@ -71,6 +71,7 @@ export default async function handler(req, res) {
       estimatedOutputTokens += Number(event.output_tokens_estimate || 0);
       if (event.reported_cost_usd !== null && event.reported_cost_usd !== undefined) {
         reportedCostUsd += Number(event.reported_cost_usd) || 0;
+        if (created >= monthStart) monthReportedCostUsd += Number(event.reported_cost_usd) || 0;
         pricedRequests++;
       }
       const key = event.provider + "::" + event.model;
@@ -116,6 +117,7 @@ export default async function handler(req, res) {
         estimatedInputTokens,
         estimatedOutputTokens,
         reportedCostUsd: Number(reportedCostUsd.toFixed(8)),
+        monthReportedCostUsd: Number(monthReportedCostUsd.toFixed(8)),
         pricedRequests,
         unpricedRequests: usageRows.length - pricedRequests,
         byModel: [...usageByModel.values()].sort((a,b) => b.requests - a.requests),
