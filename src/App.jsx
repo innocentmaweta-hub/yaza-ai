@@ -612,7 +612,11 @@ function App() {
     updateChat(chat.id, current => ({ ...current, title: current.messages.length ? current.title : content.slice(0, 42) + (content.length > 42 ? "…" : ""), messages: [...current.messages, userMessage, pendingMessage] }));
     try {
       const response = await fetch("/api/images", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + session.access_token
+        },
         body: JSON.stringify({ prompt: content })
       });
       const data = await response.json().catch(() => ({}));
