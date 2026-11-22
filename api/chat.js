@@ -15,7 +15,7 @@ const PROVIDERS = {
 const ALLOWED_MODELS = {
   openai: ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  openrouter: ["openrouter/free"],
+  openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
   claude: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
   deepseek: ["deepseek-flash", "deepseek-v4-pro"],
@@ -136,7 +136,7 @@ async function recordUsage(admin, details) {
   if (error) console.error("Yaza usage logging error:", error.message);
 }
 
-async function prepareQuota(req, provider, model) {
+async function prepareQuota(req, provider, model, options = {}) {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -161,23 +161,25 @@ async function prepareQuota(req, provider, model) {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const limits = quotaSettings();
   const dailyLimit = limits.daily;
-  const { data: quotaData, error: quotaError } = await admin.rpc("consume_yaza_quota", {
-    p_subject_key: subjectKey,
-    p_daily_limit: dailyLimit,
-    p_monthly_limit: limits.monthly
-  });
-  if (quotaError) {
-    console.error("Yaza quota check error:", quotaError.message);
-    throw new Error("Yaza usage controls are temporarily unavailable. Please try again shortly.");
+  if (!options.skipLimits) {
+    const { data: quotaData, error: quotaError } = await admin.rpc("consume_yaza_quota", {
+      p_subject_key: subjectKey,
+      p_daily_limit: dailyLimit,
+      p_monthly_limit: limits.monthly
+    });
+    if (quotaError) {
+      console.error("Yaza quota check error:", quotaError.message);
+      throw new Error("Yaza usage controls are temporarily unavailable. Please try again shortly.");
+    }
+    const quota = Array.isArray(quotaData) ? quotaData[0] : quotaData;
+    if (!quota?.allowed) {
+      const error = new Error("Your Yaza usage limit has been reached (" + dailyLimit + " requests per day or " + limits.monthly + " per month). Please try again after the limit resets.");
+      error.status = 429;
+      error.quota = { dailyUsed: quota?.daily_used || dailyLimit, dailyLimit, monthlyUsed: quota?.monthly_used || 0, monthlyLimit: limits.monthly };
+      throw error;
+    }
   }
-  const quota = Array.isArray(quotaData) ? quotaData[0] : quotaData;
-  if (!quota?.allowed) {
-    const error = new Error(`Your Yaza usage limit has been reached (${dailyLimit} requests per day or ${limits.monthly} per month). Please try again after the limit resets.`);
-    error.status = 429;
-    error.quota = { dailyUsed: quota?.daily_used || dailyLimit, dailyLimit, monthlyUsed: quota?.monthly_used || 0, monthlyLimit: limits.monthly };
-    throw error;
-  }
-  return { admin, userId, subjectKey, limits, dailyUsed: quota.daily_used, monthlyUsed: quota.monthly_used };
+  return { admin, userId, subjectKey, limits };
 }
 
 export default async function handler(req, res) {
@@ -192,7 +194,7 @@ export default async function handler(req, res) {
   let model = typeof req.body?.model === "string" && req.body.model.length < 120
     ? req.body.model.trim() : "";
   if (!model) model = requestedProvider === "yaza" ? "wachabe" : (PROVIDERS[requestedProvider]?.model || "");
-  if (requestedProvider === "openrouter") model = "openrouter/free";
+  const lastChoiceRequest = requestedProvider === "yaza" && model === "last-choice";
   const publicModelKey = requestedProvider + "/" + model;
   if (!ALLOWED_MODELS[requestedProvider]?.includes(model)) {
     return res.status(400).json({ error: "That model is not enabled for this provider." });
@@ -206,8 +208,10 @@ export default async function handler(req, res) {
       const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
       const { data, error } = await admin.from("platform_settings").select("setting_value").eq("setting_key", "wachabe_model").maybeSingle();
       if (error) throw error;
-      const route = data?.setting_value || { provider: "openrouter", model: "openrouter/free" };
-      if (!ALLOWED_MODELS[route.provider]?.includes(route.model)) throw new Error("The configured Wachabe model is invalid.");
+      const route = lastChoiceRequest
+        ? { provider: "openrouter", model: "openrouter/free" }
+        : (data?.setting_value || { provider: "openrouter", model: "openrouter/free" });
+      if (!ALLOWED_MODELS[route.provider]?.includes(route.model)) throw new Error("The configured Yaza AI model is invalid.");
       provider = route.provider;
       model = route.model;
     } catch (error) {
@@ -262,7 +266,7 @@ export default async function handler(req, res) {
   }
   let quotaContext;
   try {
-    quotaContext = await prepareQuota(req, provider, model);
+    quotaContext = await prepareQuota(req, provider, model, { skipLimits: lastChoiceRequest });
   } catch (error) {
     return res.status(error.status || 503).json({ error: error.message, quota: error.quota || undefined });
   }
@@ -271,7 +275,7 @@ export default async function handler(req, res) {
   const imageCount = attachments.filter(file => file.kind === "image").length;
   const inputTokenEstimate = estimateTokens(inputCharacters) + imageCount * 1024;
   // Bill Yaza/Wachabe against the actual provider/model selected by the administrator.
-  // OpenRouter is pinned to its free router, so that route never incurs a wallet charge.
+  // The automatic OpenRouter route and Yaza AI Last choice are free; selected OpenRouter models use their own prices.
   const billingModelKey = provider + "/" + model;
   const freeOpenRouter = provider === "openrouter" && model === "openrouter/free";
   let pricingMode = "free";
