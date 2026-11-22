@@ -4,7 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 const PROVIDERS = {
   openai: { key: "OPENAI_API_KEY", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" },
   gemini: { key: "GEMINI_API_KEY", model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
-  openrouter: { key: "OPENROUTER_API_KEY", model: process.env.OPENROUTER_MODEL || "~google/gemini-flash-latest" },
+  openrouter: { key: "OPENROUTER_API_KEY", model: process.env.OPENROUTER_MODEL || "openrouter/free" },
   kimi: { key: "KIMI_API_KEY", model: process.env.KIMI_MODEL || "moonshot-v1-8k" }
 };
 
