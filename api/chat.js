@@ -88,7 +88,7 @@ export default async function handler(req, res) {
           const match = file.data.match(/^data:([^;]+);base64,(.+)$/);
           if (match) parts.push({ inlineData: { mimeType: match[1], data: match[2] } });
         } else if (file.kind === "text") {
-          parts.push({ text: `\n\n--- Attached file: ${file.name} ---\\n${file.text}\n--- End of ${file.name} ---` });
+          parts.push({ text: `\n\n--- Attached file: ${file.name} ---\n${file.text}\n--- End of ${file.name} ---` });
         }
       }
       stream = await chat.sendMessageStream({ message: parts });
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
         const content = [{ type: "text", text: message.content }];
         for (const file of attachments) {
           if (file.kind === "image") content.push({ type: "image_url", image_url: { url: file.data } });
-          else if (file.kind === "text") content.push({ type: "text", text: `\n\n--- Attached file: ${file.name} ---\\n${file.text}\n--- End of ${file.name} ---` });
+          else if (file.kind === "text") content.push({ type: "text", text: `\n\n--- Attached file: ${file.name} ---\n${file.text}\n--- End of ${file.name} ---` });
         }
         return { role: message.role, content };
       });
