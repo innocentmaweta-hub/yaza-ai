@@ -4,7 +4,9 @@ const AVAILABLE_MODELS = {
   openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
   openrouter: ["openrouter/free"],
-  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+  claude: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
+  deepseek: ["deepseek-flash", "deepseek-v4-pro"]
 };
 const MODEL_LABELS = {
   "openai/gpt-4.1-mini":"OpenAI · GPT-4.1 mini","openai/gpt-4.1":"OpenAI · GPT-4.1","openai/o4-mini":"OpenAI · o4-mini",
@@ -13,6 +15,8 @@ const MODEL_LABELS = {
   "openrouter/google/gemini-3.7-flash":"OpenRouter · Gemini 3.7 Flash","openrouter/openai/gpt-4.1":"OpenRouter · GPT-4.1",
   "openrouter/deepseek/deepseek-r1":"OpenRouter · DeepSeek R1","openrouter/anthropic/claude-sonnet-4":"OpenRouter · Claude Sonnet 4",
   "kimi/moonshot-v1-8k":"Kimi · 8K","kimi/moonshot-v1-32k":"Kimi · 32K","kimi/moonshot-v1-128k":"Kimi · 128K",
+  "claude/claude-sonnet-5-5":"Claude · Sonnet 5.5","claude/claude-opus-5-5":"Claude · Opus 5.5","claude/claude-haiku-5-5":"Claude · Haiku 5.5",
+  "deepseek/deepseek-flash":"DeepSeek · Flash","deepseek/deepseek-v4-pro":"DeepSeek · V4 Pro",
   "yaza/wachabe":"Yaza AI · Wachabe","image/generation":"Image generation · Seedream 4.5"
 };
 const ALLOWED_PRICING_KEYS = new Set([...Object.entries(AVAILABLE_MODELS).flatMap(([provider,models]) => models.map(model => provider + "/" + model)), "yaza/wachabe","image/generation"]);
