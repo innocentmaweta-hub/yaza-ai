@@ -201,3 +201,36 @@
  .settings-nav button{font-size:9px}
  .settings-content{padding:13px 11px}
 }
+
+
+/* Persistent account preferences: light appearance and working voice controls. */
+.settings-inline-select{padding:7px 10px;border:1px solid #3b3c45;border-radius:8px;background:#202127;color:#e6e5ea;font:inherit;font-size:10px}
+.settings-toggle{display:flex;align-items:center;gap:8px;flex:0 0 auto;color:#d2a18d;font-size:10px;cursor:pointer}
+.settings-toggle input{width:16px;height:16px;accent-color:#d98d6d}
+.app-shell.theme-light{--yaza-bg:#f5f5f7;--yaza-panel:#fff;--yaza-panel-muted:#f0f1f4;--yaza-border:#dedfe5;--yaza-text:#22232a;--yaza-muted:#6d707b;color:var(--yaza-text);background:var(--yaza-bg)}
+.theme-light .sidebar,.theme-light .chat-main,.theme-light .composer-area{background:var(--yaza-bg);color:var(--yaza-text)}
+.theme-light .sidebar{border-color:var(--yaza-border)}
+.theme-light .side-search,.theme-light .plan-card,.theme-light .composer,.theme-light .suggestion-card{background:var(--yaza-panel);border-color:var(--yaza-border);color:var(--yaza-text)}
+.theme-light .brand,.theme-light .chat-select,.theme-light .profile-row,.theme-light .composer textarea,.theme-light .message-content,.theme-light .welcome-title{color:var(--yaza-text)}
+.theme-light .history-label,.theme-light .side-search input,.theme-light .composer textarea::placeholder,.theme-light .message-meta,.theme-light .welcome-subtitle{color:var(--yaza-muted)}
+.theme-light .chat-row.selected,.theme-light .chat-row:hover,.theme-light .new-chat-btn:hover,.theme-light .memory-nav-btn:hover{background:#e9eaf0}
+.theme-light .message-bubble,.theme-light .assistant-message{color:#292a31}
+.theme-light .composer-tools .tool-btn{color:#626571}
+.theme-light .settings-page{background:#fff;border-color:#dfe0e6}
+.theme-light .settings-sidebar{background:#f6f6f8;border-color:#e2e3e8}
+.theme-light .settings-sidebar-brand strong,.theme-light .settings-mobile-heading,.theme-light .settings-panel-section h2{color:#24252b}
+.theme-light .settings-sidebar-brand span,.theme-light .settings-panel-intro,.theme-light .settings-option span,.theme-light .settings-content-footer{color:#70737e}
+.theme-light .settings-nav button{color:#5e616d}
+.theme-light .settings-nav button.active{background:#f5e9e4;color:#9c5940}
+.theme-light .settings-option{border-color:#e7e7eb}
+.theme-light .settings-option strong,.theme-light .settings-action-card strong{color:#292a31}
+.theme-light .settings-chip,.theme-light .settings-inline-select{background:#f2f2f5;border-color:#dedfe5;color:#78503f!important}
+.theme-light .settings-action-card{background:#fafafd;border-color:#e0e1e7}
+.theme-light .settings-info-note{background:#f7f3f1;border-color:#eadbd4;color:#655d5a}
+.theme-light .settings-content-footer{border-color:#e5e5ea}
+.theme-light .account-menu{background:#fff;border-color:#dedfe5}
+.theme-light .account-menu-heading strong,.theme-light .account-menu>button{color:#30313a}
+.theme-light .account-menu-divider{background:#e5e5ea}
+.theme-light .account-menu>button:hover{background:#f1f1f5}
+.theme-light .settings-danger-action{background:#fff5f4;color:#a64b47}
+@media(max-width:640px){.theme-light .settings-page{background:#fff}}
