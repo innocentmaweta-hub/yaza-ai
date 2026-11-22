@@ -163,6 +163,9 @@ function App() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminData, setAdminData] = useState(null);
+  const [usageData, setUsageData] = useState(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState("");
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const activeChat = chats.find(c => c.id === activeId) || chats[0];
@@ -321,6 +324,18 @@ function App() {
       setAdminData(data);
     } catch (error) { setNotice(error.message || "Could not load the admin dashboard."); setAdminOpen(false); }
     finally { setAdminBusy(false); }
+  }
+
+  async function loadUsageReport() {
+    if (!session?.access_token) { setUsageData(null); setUsageError("Sign in to view account usage."); return; }
+    setUsageLoading(true); setUsageError("");
+    try {
+      const response = await fetch("/api/usage", { headers: { Authorization: "Bearer " + session.access_token } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not load usage.");
+      setUsageData(data);
+    } catch (error) { setUsageError(error.message || "Could not load usage."); }
+    finally { setUsageLoading(false); }
   }
 
   async function loadCloudMemories() {
@@ -1081,7 +1096,7 @@ function App() {
         <aside className="settings-sidebar">
           <div className="settings-sidebar-top"><div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Settings</strong><span>Yaza AI preferences</span></div></div><button className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={18}/></button></div>
           <nav className="settings-nav" aria-label="Settings sections">
-            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => setSettingsTab(id)}>{label}</button>)}
+            {[["general","General"],["ai","AI preferences"],["personalization","Personalization"],["voice","Voice"],["usage","Usage"],["data","Data controls"],["account","Account"]].map(([id,label]) => <button key={id} className={settingsTab===id?"active":""} onClick={() => { setSettingsTab(id); if (id === "usage") loadUsageReport(); }}>{label}</button>)}
           </nav>
           <div className="settings-sidebar-bottom"><span>Yaza AI</span><span>Settings</span></div>
         </aside>
@@ -1103,6 +1118,24 @@ function App() {
             <div className="settings-option"><div><strong>Voice input</strong><span>Allow speech-to-text from the microphone control. Browser microphone permission is still required.</span></div><label className="settings-toggle"><input type="checkbox" checked={voiceInputEnabled} onChange={event => setVoiceInputEnabled(event.target.checked)}/><span>{voiceInputEnabled ? "On" : "Off"}</span></label></div>
             <div className="settings-option"><div><strong>Read aloud</strong><span>Allow assistant replies to be spoken using your browser voice.</span></div><label className="settings-toggle"><input type="checkbox" checked={readAloudEnabled} onChange={event => setReadAloudEnabled(event.target.checked)}/><span>{readAloudEnabled ? "On" : "Off"}</span></label></div>
             <div className="settings-info-note">Voice availability and voices depend on your browser and device. Chrome generally provides the best support.</div>
+          </section>}
+          {settingsTab==="usage" && <section className="settings-panel-section"><h2>Usage</h2><p className="settings-panel-intro">Review your Yaza request allowance and recent AI usage.</p>
+            {!session && <div className="settings-info-note">Sign in to see your account usage. Guest requests have a smaller daily allowance.</div>}
+            {usageLoading && <div className="settings-info-note">Loading your usage report…</div>}
+            {usageError && <div className="settings-info-note">{usageError}</div>}
+            {usageData && <>
+              <div className="usage-meter"><div><strong>Daily requests</strong><span>{usageData.daily.used} of {usageData.daily.limit}</span></div><div className="usage-track"><i style={{width: Math.min(100, usageData.daily.used / usageData.daily.limit * 100) + "%"}}/></div></div>
+              <div className="usage-meter"><div><strong>Monthly requests</strong><span>{usageData.monthly.used} of {usageData.monthly.limit}</span></div><div className="usage-track"><i style={{width: Math.min(100, usageData.monthly.used / usageData.monthly.limit * 100) + "%"}}/></div></div>
+              <div className="usage-stat-grid">
+                <div className="usage-stat"><span>Estimated input tokens</span><strong>{Number(usageData.estimatedInputTokens || 0).toLocaleString()}</strong></div>
+                <div className="usage-stat"><span>Estimated output tokens</span><strong>{Number(usageData.estimatedOutputTokens || 0).toLocaleString()}</strong></div>
+                <div className="usage-stat"><span>Provider-reported cost</span><strong>${Number(usageData.reportedCostUsd || 0).toFixed(4)}</strong></div>
+                <div className="usage-stat"><span>Requests without cost data</span><strong>{usageData.unpricedRequests}</strong></div>
+              </div>
+              <div className="settings-info-note">Token counts are approximate estimates based on text length. Provider-reported cost is shown only when the provider includes it (currently most consistently available through OpenRouter); it is not a complete invoice or billing statement.</div>
+              <div className="usage-model-list">{usageData.byModel.map((item,index)=><div key={index}><span>{item.provider} · {item.model}</span><strong>{item.requests} requests</strong></div>)}{!usageData.byModel.length && <div className="settings-info-note">No requests recorded this month yet.</div>}</div>
+              <button className="settings-action-card" onClick={loadUsageReport}><div><strong>Refresh usage</strong><span>Update this report from Yaza's server records.</span></div><span className="settings-chip">Refresh</span></button>
+            </>}
           </section>}
           {settingsTab==="data" && <section className="settings-panel-section"><h2>Data controls</h2><p className="settings-panel-intro">Understand where your conversations and attachments are kept.</p>
             <div className="settings-option"><div><strong>Conversation history</strong><span>Signed-in conversations are synced with your Yaza account. Local history may also be available in this browser.</span></div><span className="settings-chip">{session ? "Account sync" : "This browser"}</span></div>
