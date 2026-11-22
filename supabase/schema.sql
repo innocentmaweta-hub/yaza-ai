@@ -53,7 +53,7 @@ create policy "Users manage their own conversation shares" on public.conversatio
   for all to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
-grant select, insert, update, delete on public.conversation_shares to authenticated;
+grant select, insert, update, delete on public.conversation_shares to authenticated, service_role;
 
 alter table public.messages add column if not exists attachments jsonb not null default '[]'::jsonb;
 
@@ -126,6 +126,8 @@ create table if not exists public.conversation_shares (
   user_id uuid not null references auth.users(id) on delete cascade,
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   token_hash text not null unique,
+  title text not null default 'Shared conversation',
+  messages jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   revoked_at timestamptz
 );
@@ -137,4 +139,4 @@ create policy "Users manage their own conversation shares" on public.conversatio
   for all to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
-grant select, insert, update, delete on public.conversation_shares to authenticated;
+grant select, insert, update, delete on public.conversation_shares to authenticated, service_role;
