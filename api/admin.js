@@ -145,22 +145,24 @@ export default async function handler(req, res) {
         if (created >= monthStart) monthReportedCostUsd += Number(event.reported_cost_usd) || 0;
         pricedRequests++;
       }
-      const key = event.provider + "::" + event.model;
-      const item = usageByModel.get(key) || { provider: event.provider, model: event.model, requests: 0, estimatedInputTokens: 0, estimatedOutputTokens: 0, reportedCostUsd: 0, pricedRequests: 0 };
+      const key = event.public_model_key || event.provider + "::" + event.model;
+      const item = usageByModel.get(key) || { provider: event.provider, model: event.model, publicModelKey:event.public_model_key || null, requests: 0, estimatedInputTokens: 0, estimatedOutputTokens: 0, reportedCostUsd: 0, billedAmountMinor:0, pricedRequests: 0 };
       item.requests++;
       item.estimatedInputTokens += Number(event.input_tokens_estimate || 0);
       item.estimatedOutputTokens += Number(event.output_tokens_estimate || 0);
+      item.billedAmountMinor += Number(event.billed_amount_minor || 0);
       if (event.reported_cost_usd !== null && event.reported_cost_usd !== undefined) {
         item.reportedCostUsd += Number(event.reported_cost_usd) || 0;
         item.pricedRequests++;
       }
       usageByModel.set(key, item);
       if (event.user_id) {
-        const user = usageByUser.get(event.user_id) || { userId: event.user_id, requests: 0, estimatedInputTokens: 0, estimatedOutputTokens: 0, reportedCostUsd: 0 };
+        const user = usageByUser.get(event.user_id) || { userId: event.user_id, requests: 0, estimatedInputTokens: 0, estimatedOutputTokens: 0, reportedCostUsd: 0, billedAmountMinor:0 };
         user.requests++;
         user.estimatedInputTokens += Number(event.input_tokens_estimate || 0);
         user.estimatedOutputTokens += Number(event.output_tokens_estimate || 0);
         user.reportedCostUsd += Number(event.reported_cost_usd || 0);
+        user.billedAmountMinor += Number(event.billed_amount_minor || 0);
         usageByUser.set(event.user_id, user);
       }
     }
@@ -175,6 +177,9 @@ export default async function handler(req, res) {
         totalChargesMinor += Math.abs(amount); if (created >= monthStart) monthChargesMinor += Math.abs(amount);
         const modelKey = item.metadata?.model_key || "unknown";
         walletModelRevenue.set(modelKey,(walletModelRevenue.get(modelKey)||0)+Math.abs(amount));
+        const user = usageByUser.get(item.user_id) || { userId:item.user_id, requests:0, estimatedInputTokens:0, estimatedOutputTokens:0, reportedCostUsd:0, billedAmountMinor:0 };
+        user.billedAmountMinor += Math.abs(amount);
+        usageByUser.set(item.user_id,user);
       }
     }
     const userEmails = new Map((usersResult.data?.users || []).map(user => [user.id, user.email || user.id.slice(0, 8)]));
