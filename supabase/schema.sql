@@ -20,7 +20,9 @@ create table if not exists public.messages (
 create index if not exists conversations_user_updated_idx on public.conversations(user_id, updated_at desc);
 create index if not exists conversations_user_archived_updated_idx on public.conversations(user_id, is_archived, updated_at desc);
 alter table public.conversations add column if not exists is_archived boolean not null default false;
-alter table public.conversations add column if not exists mode text not null default 'general' check (mode in ('general','school','innovator','entrepreneur','joking'));
+alter table public.conversations add column if not exists mode text not null default 'general';
+alter table public.conversations drop constraint if exists conversations_mode_check;
+alter table public.conversations add constraint conversations_mode_check check (mode in ('general','school','innovator','entrepreneur','joking','developer'));
 create index if not exists messages_conversation_created_idx on public.messages(conversation_id, created_at);
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
