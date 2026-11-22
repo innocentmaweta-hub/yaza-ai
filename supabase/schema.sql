@@ -218,3 +218,17 @@ end;
 $$;
 revoke all on function public.consume_yaza_quota(text, integer, integer) from public, anon, authenticated;
 grant execute on function public.consume_yaza_quota(text, integer, integer) to service_role;
+
+
+-- Private platform configuration. Only server-side service-role code may read or change it.
+create table if not exists public.platform_settings (
+  setting_key text primary key,
+  setting_value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.platform_settings enable row level security;
+revoke all on public.platform_settings from public, anon, authenticated;
+grant select, insert, update, delete on public.platform_settings to service_role;
+insert into public.platform_settings (setting_key, setting_value)
+values ('wachabe_model', '{"provider":"openrouter","model":"openrouter/free"}'::jsonb)
+on conflict (setting_key) do nothing;
