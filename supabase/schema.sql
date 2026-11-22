@@ -232,3 +232,167 @@ grant select, insert, update, delete on public.platform_settings to service_role
 insert into public.platform_settings (setting_key, setting_value)
 values ('wachabe_model', '{"provider":"openrouter","model":"openrouter/free"}'::jsonb)
 on conflict (setting_key) do nothing;
+
+
+-- Prepaid MWK wallet, PayChangu top-ups, and server-controlled per-model prices.
+create table if not exists public.wallet_accounts (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  currency text not null default 'MWK' check (currency = 'MWK'),
+  balance_minor bigint not null default 0 check (balance_minor >= 0),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.wallet_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('topup','usage_reserve','usage_refund','usage_charge','adjustment')),
+  amount_minor bigint not null,
+  currency text not null default 'MWK' check (currency = 'MWK'),
+  reference text not null,
+  description text not null default '',
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (user_id, reference, kind)
+);
+create index if not exists wallet_transactions_user_created_idx on public.wallet_transactions(user_id, created_at desc);
+create table if not exists public.usage_reservations (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  model_key text not null,
+  provider text not null,
+  model text not null,
+  pricing_mode text not null check (pricing_mode in ('tokens','message')),
+  reserved_minor bigint not null check (reserved_minor >= 0),
+  input_tokens integer not null default 0,
+  output_token_reserve integer not null default 0,
+  input_rate_per_1k_mwk numeric(14,6) not null default 0,
+  output_rate_per_1k_mwk numeric(14,6) not null default 0,
+  message_rate_mwk numeric(14,6) not null default 0,
+  status text not null default 'reserved' check (status in ('reserved','settled','released')),
+  actual_minor bigint,
+  created_at timestamptz not null default now(),
+  settled_at timestamptz
+);
+create index if not exists usage_reservations_user_created_idx on public.usage_reservations(user_id, created_at desc);
+create table if not exists public.payment_topups (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tx_ref text not null unique,
+  amount_mwk integer not null check (amount_mwk > 0),
+  currency text not null default 'MWK' check (currency = 'MWK'),
+  status text not null default 'pending' check (status in ('pending','success','failed')),
+  checkout_url text,
+  provider_reference text,
+  verification_data jsonb,
+  created_at timestamptz not null default now(),
+  verified_at timestamptz
+);
+create index if not exists payment_topups_user_created_idx on public.payment_topups(user_id, created_at desc);
+create table if not exists public.model_pricing (
+  model_key text primary key,
+  enabled boolean not null default false,
+  pricing_mode text not null default 'tokens' check (pricing_mode in ('tokens','message')),
+  input_rate_per_1k_mwk numeric(14,6) not null default 0 check (input_rate_per_1k_mwk >= 0),
+  output_rate_per_1k_mwk numeric(14,6) not null default 0 check (output_rate_per_1k_mwk >= 0),
+  message_rate_mwk numeric(14,6) not null default 0 check (message_rate_mwk >= 0),
+  updated_at timestamptz not null default now()
+);
+alter table public.wallet_accounts enable row level security;
+alter table public.wallet_transactions enable row level security;
+alter table public.usage_reservations enable row level security;
+alter table public.payment_topups enable row level security;
+alter table public.model_pricing enable row level security;
+revoke all on public.wallet_accounts, public.wallet_transactions, public.usage_reservations, public.payment_topups, public.model_pricing from public, anon, authenticated;
+grant select, insert, update, delete on public.wallet_accounts, public.wallet_transactions, public.usage_reservations, public.payment_topups, public.model_pricing to service_role;
+
+insert into public.model_pricing(model_key,enabled,pricing_mode) values
+ ('openai/gpt-4.1-mini',false,'tokens'),('openai/gpt-4.1',false,'tokens'),('openai/o4-mini',false,'tokens'),
+ ('gemini/gemini-2.5-flash',false,'tokens'),('gemini/gemini-2.5-pro',false,'tokens'),('gemini/gemini-2.0-flash',false,'tokens'),
+ ('openrouter/openrouter/free',false,'tokens'),('openrouter/~google/gemini-flash-latest',false,'tokens'),
+ ('openrouter/google/gemini-3.7-flash',false,'tokens'),('openrouter/openai/gpt-4.1',false,'tokens'),
+ ('openrouter/deepseek/deepseek-r1',false,'tokens'),('openrouter/anthropic/claude-sonnet-4',false,'tokens'),
+ ('kimi/moonshot-v1-8k',false,'tokens'),('kimi/moonshot-v1-32k',false,'tokens'),('kimi/moonshot-v1-128k',false,'tokens'),
+ ('yaza/wachabe',false,'tokens')
+on conflict(model_key) do nothing;
+
+alter table public.usage_events add column if not exists public_model_key text;
+alter table public.usage_events add column if not exists billed_amount_minor bigint;
+alter table public.usage_events add column if not exists billing_status text;
+
+create or replace function public.reserve_yaza_usage(
+  p_usage_id uuid, p_user_id uuid, p_model_key text, p_provider text, p_model text,
+  p_pricing_mode text, p_reserved_minor bigint, p_input_tokens integer,
+  p_output_token_reserve integer, p_input_rate numeric, p_output_rate numeric, p_message_rate numeric
+) returns table(allowed boolean, balance_minor bigint, reserved_minor bigint)
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_balance bigint; v_existing public.usage_reservations%rowtype;
+begin
+  if p_usage_id is null or p_user_id is null or p_reserved_minor < 0 or p_pricing_mode not in ('tokens','message') then raise exception 'Invalid reservation'; end if;
+  select * into v_existing from public.usage_reservations where id=p_usage_id;
+  if found then
+    if v_existing.user_id <> p_user_id then raise exception 'Reservation ownership mismatch'; end if;
+    select balance_minor into v_balance from public.wallet_accounts where user_id=p_user_id;
+    return query select (v_existing.status='reserved' or v_existing.status='settled'), coalesce(v_balance,0), v_existing.reserved_minor; return;
+  end if;
+  insert into public.wallet_accounts(user_id) values(p_user_id) on conflict(user_id) do nothing;
+  select balance_minor into v_balance from public.wallet_accounts where user_id=p_user_id for update;
+  if v_balance < p_reserved_minor then return query select false,v_balance,p_reserved_minor; return; end if;
+  update public.wallet_accounts set balance_minor=balance_minor-p_reserved_minor,updated_at=now() where user_id=p_user_id;
+  insert into public.usage_reservations(id,user_id,model_key,provider,model,pricing_mode,reserved_minor,input_tokens,output_token_reserve,input_rate_per_1k_mwk,output_rate_per_1k_mwk,message_rate_mwk)
+  values(p_usage_id,p_user_id,p_model_key,p_provider,p_model,p_pricing_mode,p_reserved_minor,greatest(p_input_tokens,0),greatest(p_output_token_reserve,0),greatest(p_input_rate,0),greatest(p_output_rate,0),greatest(p_message_rate,0));
+  return query select true,v_balance-p_reserved_minor,p_reserved_minor;
+end; $$;
+
+create or replace function public.settle_yaza_usage(p_usage_id uuid,p_actual_minor bigint)
+returns table(success boolean,balance_minor bigint,charged_minor bigint)
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_res public.usage_reservations%rowtype; v_balance bigint; v_refund bigint;
+begin
+  select * into v_res from public.usage_reservations where id=p_usage_id for update;
+  if not found then raise exception 'Usage reservation not found'; end if;
+  if v_res.status='settled' then select balance_minor into v_balance from public.wallet_accounts where user_id=v_res.user_id; return query select true,v_balance,coalesce(v_res.actual_minor,0); return; end if;
+  if v_res.status <> 'reserved' or p_actual_minor < 0 or p_actual_minor > v_res.reserved_minor then raise exception 'Invalid usage settlement'; end if;
+  v_refund:=v_res.reserved_minor-p_actual_minor;
+  update public.wallet_accounts set balance_minor=balance_minor+v_refund,updated_at=now() where user_id=v_res.user_id returning balance_minor into v_balance;
+  insert into public.wallet_transactions(user_id,kind,amount_minor,reference,description,metadata)
+  values(v_res.user_id,'usage_charge',-p_actual_minor,p_usage_id::text,'AI response usage charge',jsonb_build_object('model_key',v_res.model_key,'provider',v_res.provider,'model',v_res.model));
+  update public.usage_reservations set status='settled',actual_minor=p_actual_minor,settled_at=now() where id=p_usage_id;
+  return query select true,v_balance,p_actual_minor;
+end; $$;
+
+create or replace function public.release_yaza_usage(p_usage_id uuid,p_reason text default 'AI request failed')
+returns table(success boolean,balance_minor bigint)
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_res public.usage_reservations%rowtype; v_balance bigint;
+begin
+  select * into v_res from public.usage_reservations where id=p_usage_id for update;
+  if not found then return query select false,0::bigint; return; end if;
+  if v_res.status in ('released','settled') then select balance_minor into v_balance from public.wallet_accounts where user_id=v_res.user_id; return query select true,v_balance; return; end if;
+  update public.wallet_accounts set balance_minor=balance_minor+v_res.reserved_minor,updated_at=now() where user_id=v_res.user_id returning balance_minor into v_balance;
+  update public.usage_reservations set status='released',settled_at=now() where id=p_usage_id;
+  return query select true,v_balance;
+end; $$;
+
+create or replace function public.credit_yaza_topup(p_user_id uuid,p_tx_ref text,p_amount_mwk integer,p_metadata jsonb default '{}'::jsonb)
+returns table(credited boolean,balance_minor bigint)
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_balance bigint; v_amount bigint;
+begin
+  if p_user_id is null or p_tx_ref is null or length(p_tx_ref)>160 or p_amount_mwk<1 then raise exception 'Invalid top-up'; end if;
+  insert into public.wallet_accounts(user_id) values(p_user_id) on conflict(user_id) do nothing;
+  select balance_minor into v_balance from public.wallet_accounts where user_id=p_user_id for update;
+  if exists(select 1 from public.wallet_transactions where user_id=p_user_id and kind='topup' and reference=p_tx_ref) then return query select false,v_balance; return; end if;
+  v_amount:=p_amount_mwk::bigint*100;
+  update public.wallet_accounts set balance_minor=balance_minor+v_amount,updated_at=now() where user_id=p_user_id returning balance_minor into v_balance;
+  insert into public.wallet_transactions(user_id,kind,amount_minor,reference,description,metadata)
+  values(p_user_id,'topup',v_amount,p_tx_ref,'PayChangu wallet top-up',coalesce(p_metadata,'{}'::jsonb));
+  return query select true,v_balance;
+end; $$;
+
+revoke all on function public.reserve_yaza_usage(uuid,uuid,text,text,text,text,bigint,integer,integer,numeric,numeric,numeric) from public,anon,authenticated;
+revoke all on function public.settle_yaza_usage(uuid,bigint) from public,anon,authenticated;
+revoke all on function public.release_yaza_usage(uuid,text) from public,anon,authenticated;
+revoke all on function public.credit_yaza_topup(uuid,text,integer,jsonb) from public,anon,authenticated;
+grant execute on function public.reserve_yaza_usage(uuid,uuid,text,text,text,text,bigint,integer,integer,numeric,numeric,numeric) to service_role;
+grant execute on function public.settle_yaza_usage(uuid,bigint) to service_role;
+grant execute on function public.release_yaza_usage(uuid,text) to service_role;
+grant execute on function public.credit_yaza_topup(uuid,text,integer,jsonb) to service_role;
