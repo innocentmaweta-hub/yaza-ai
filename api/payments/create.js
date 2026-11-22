@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         amount: String(amount), currency: "MWK", tx_ref: txRef,
         email: authData.user.email || undefined,
-        callback_url: baseUrl + "/?payment=return",
+        callback_url: baseUrl + "/api/paychangu/callback",
         return_url: baseUrl + "/?payment=return",
         customization: { title: "Yaza AI wallet", description: "Add funds to your Yaza AI wallet" },
         meta: { product: "yaza-ai-wallet", tx_ref: txRef }
