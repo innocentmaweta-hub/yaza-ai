@@ -45,9 +45,14 @@ create table if not exists public.conversation_shares (
   user_id uuid not null references auth.users(id) on delete cascade,
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   token_hash text not null unique,
+  title text not null default 'Shared conversation',
+  messages jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   revoked_at timestamptz
 );
+alter table public.conversation_shares
+  add column if not exists title text not null default 'Shared conversation',
+  add column if not exists messages jsonb not null default '[]'::jsonb;
 create index if not exists conversation_shares_owner_conversation_idx
   on public.conversation_shares(user_id, conversation_id);
 create index if not exists conversation_shares_conversation_id_idx
