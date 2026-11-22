@@ -1144,6 +1144,32 @@ function App() {
             <div className="admin-model-config-footer"><span>Currently active: {adminData.wachabe?.provider || "openrouter"} · {adminData.wachabe?.model || "openrouter/free"}</span><button className="settings-primary-action" onClick={saveWachabeModel} disabled={wachabeSaving || (adminData.wachabe?.provider === wachabeProvider && adminData.wachabe?.model === wachabeModel)}>{wachabeSaving ? "Saving…" : "Save Wachabe model"}</button></div>
             <div className="admin-footnote">The selected provider's API key must be configured in Vercel. The underlying model is hidden from users and is applied server-side.</div>
           </div>
+          <div className="admin-section-title">MODEL PRICING & ACCESS</div>
+          <div className="admin-footnote">Set what customers pay for each model. Token pricing uses separate input and output rates per 1,000 tokens; message pricing charges once for each completed response. Prices are in MWK. Wachabe has its own customer price even when you change its underlying provider.</div>
+          <div className="admin-pricing-list">
+            {(adminData.modelPricing || []).map(item => {
+              const draft = pricingDrafts[item.model_key] || item;
+              return <div className="admin-model-config admin-pricing-card" key={item.model_key}>
+                <div className="admin-model-config-copy"><strong>{item.label || item.model_key}</strong><span>{item.model_key}</span></div>
+                <label className="admin-pricing-enabled"><span>Available to customers</span><input type="checkbox" checked={draft.enabled === true} onChange={event => updatePricingDraft(item.model_key,"enabled",event.target.checked)} /></label>
+                <label><span>Pricing method</span><select value={draft.pricing_mode || "tokens"} onChange={event => updatePricingDraft(item.model_key,"pricing_mode",event.target.value)}><option value="tokens">Per 1,000 tokens</option><option value="message">Fixed per message</option></select></label>
+                {draft.pricing_mode === "message" ? <label><span>Price per completed response (MWK)</span><input type="number" min="0" step="0.01" value={draft.message_rate_mwk ?? 0} onChange={event => updatePricingDraft(item.model_key,"message_rate_mwk",event.target.value)} /></label> : <>
+                  <label><span>Input price per 1,000 tokens (MWK)</span><input type="number" min="0" step="0.0001" value={draft.input_rate_per_1k_mwk ?? 0} onChange={event => updatePricingDraft(item.model_key,"input_rate_per_1k_mwk",event.target.value)} /></label>
+                  <label><span>Output price per 1,000 tokens (MWK)</span><input type="number" min="0" step="0.0001" value={draft.output_rate_per_1k_mwk ?? 0} onChange={event => updatePricingDraft(item.model_key,"output_rate_per_1k_mwk",event.target.value)} /></label>
+                </>}
+                <div className="admin-model-config-footer"><span>{draft.enabled ? "Enabled after saving" : "Currently disabled"}</span><button className="settings-primary-action" onClick={() => saveModelPricing(item.model_key)} disabled={!!pricingSaving[item.model_key]}>{pricingSaving[item.model_key] ? "Saving…" : "Save pricing"}</button></div>
+              </div>;
+            })}
+          </div>
+          <div className="admin-section-title">PAYMENTS & WALLET REVENUE</div>
+          <div className="admin-stat-grid usage-admin-grid">
+            <div className="admin-stat"><span>Wallet accounts</span><strong>{adminData.wallet?.accounts || 0}</strong></div>
+            <div className="admin-stat"><span>Total top-ups</span><strong>MK {(Number(adminData.wallet?.totalTopupsMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>
+            <div className="admin-stat"><span>Top-ups this month</span><strong>MK {(Number(adminData.wallet?.monthTopupsMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>
+            <div className="admin-stat"><span>Model charges this month</span><strong>MK {(Number(adminData.wallet?.monthChargesMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>
+          </div>
+          <div className="admin-footnote">Wallet totals are based on the transaction ledger. They represent customer deposits and usage charges, not net profit or provider expenses. The transaction sample may be limited to the latest 10,000 entries.</div>
+          <div className="usage-model-list">{(adminData.wallet?.revenueByModel || []).map(item => <div key={item.modelKey}><span>{item.label}</span><strong>MK {(Number(item.amountMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>)}{!(adminData.wallet?.revenueByModel || []).length && <div className="settings-info-note">No paid model usage has been recorded yet.</div>}</div>
           <div className="admin-section-title">API USAGE & COST TRACKING</div>
           <div className="admin-stat-grid usage-admin-grid">
             <div className="admin-stat"><span>Requests today</span><strong>{adminData.usage?.todayRequests ?? 0}</strong></div>
