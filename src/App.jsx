@@ -195,7 +195,7 @@ function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession || null);
-      if (!nextSession) { setPreferencesReady(false); setPreferencesStatus("This browser"); setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); }
+      if (!nextSession) { setPreferencesReady(false); setPreferencesStatus("This browser"); setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); setUsageData(null); setUsageError(""); }
       else { setPreferencesReady(false); setCloudReady(false); setTimeout(async () => { await loadCloudPreferences(nextSession.user.id); await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); }, 0); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
@@ -1057,7 +1057,7 @@ function App() {
             <div className="admin-stat"><span>Requests today</span><strong>{adminData.usage?.todayRequests ?? 0}</strong></div>
             <div className="admin-stat"><span>Requests this month</span><strong>{adminData.usage?.monthRequests ?? 0}</strong></div>
             <div className="admin-stat"><span>Estimated text tokens</span><strong>{((adminData.usage?.estimatedInputTokens || 0)+(adminData.usage?.estimatedOutputTokens || 0)).toLocaleString()}</strong></div>
-            <div className="admin-stat"><span>Provider-reported cost</span><strong>${Number(adminData.usage?.reportedCostUsd || 0).toFixed(4)}</strong></div>
+            <div className="admin-stat"><span>Reported cost this month</span><strong>${Number(adminData.usage?.monthReportedCostUsd || 0).toFixed(4)}</strong></div>
           </div>
           <div className="admin-footnote">Limits: {adminData.quotas?.dailyRequests || 50} requests per signed-in user per day · {adminData.quotas?.monthlyRequests || 1000} per month · {adminData.quotas?.guestDailyRequests || 10} per guest per day. Token counts are estimates from text length. Cost is shown only when a provider reports it; it is not a complete bill. {adminData.usage?.unpricedRequests || 0} of {adminData.usage?.sampledEvents || 0} sampled requests have no provider cost data.{adminData.usage?.sampleMayBeTruncated ? " Usage sample is capped at the latest 10,000 events." : ""}</div>
           <div className="admin-table usage-admin-table">
@@ -1142,7 +1142,7 @@ function App() {
               <div className="usage-stat-grid">
                 <div className="usage-stat"><span>Estimated input tokens</span><strong>{Number(usageData.estimatedInputTokens || 0).toLocaleString()}</strong></div>
                 <div className="usage-stat"><span>Estimated output tokens</span><strong>{Number(usageData.estimatedOutputTokens || 0).toLocaleString()}</strong></div>
-                <div className="usage-stat"><span>Provider-reported cost</span><strong>${Number(usageData.reportedCostUsd || 0).toFixed(4)}</strong></div>
+                <div className="usage-stat"><span>Provider-reported cost this month</span><strong>${Number(usageData.reportedCostUsd || 0).toFixed(4)}</strong></div>
                 <div className="usage-stat"><span>Requests without cost data</span><strong>{usageData.unpricedRequests}</strong></div>
               </div>
               <div className="settings-info-note">Token counts are approximate estimates based on text length. Provider-reported cost is shown only when the provider includes it (currently most consistently available through OpenRouter); it is not a complete invoice or billing statement.</div>
