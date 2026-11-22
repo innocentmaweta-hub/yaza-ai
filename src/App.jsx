@@ -20,6 +20,19 @@ const PROVIDERS = {
 };
 const STORAGE = "yaza-ai-conversations-v1";
 const makeChat = () => ({ id: crypto.randomUUID(), title: "New chat", messages: [], updatedAt: Date.now() });
+const PROVIDER_SETTINGS = "yaza-ai-provider-settings-v1";
+function readProviderSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROVIDER_SETTINGS) || "{}");
+    const provider = PROVIDERS[saved.provider] ? saved.provider : "openai";
+    const model = PROVIDERS[provider].models.some(item => item.id === saved.model)
+      ? saved.model
+      : PROVIDERS[provider].models[0].id;
+    return { provider, model };
+  } catch {
+    return { provider: "openai", model: PROVIDERS.openai.models[0].id };
+  }
+}
 
 function App() {
   const [chats, setChats] = useState(() => {
@@ -27,8 +40,9 @@ function App() {
     catch { return [makeChat()]; }
   });
   const [activeId, setActiveId] = useState(() => chats[0]?.id);
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState(PROVIDERS.openai.models[0].id);
+  const [providerSettings] = useState(readProviderSettings);
+  const [provider, setProvider] = useState(providerSettings.provider);
+  const [model, setModel] = useState(providerSettings.model);
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -53,6 +67,9 @@ function App() {
   const isNew = messages.length === 0;
 
   useEffect(() => { localStorage.setItem(STORAGE, JSON.stringify(chats)); }, [chats]);
+  useEffect(() => {
+    localStorage.setItem(PROVIDER_SETTINGS, JSON.stringify({ provider, model }));
+  }, [provider, model]);
 
   useEffect(() => {
     if (!supabase) { setCloudStatus("Local mode"); setCloudReady(true); return; }
