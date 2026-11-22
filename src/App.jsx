@@ -1151,7 +1151,7 @@ function App() {
             </div>
           </div>
         </div>
-        <div className="top-actions">{messages.length > 0 && <button className="share-conversation-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setShareError(""); setShareUrl(""); setShareOpen(true); }} disabled={sending}><Share2 size={14}/> Share</button>}<span className="private-label"><span></span> {session ? "Cloud synced" : cloudStatus || "Private session"}</span><button className="upgrade-btn" onClick={() => setNotice("Account plans will be available when Yaza accounts are enabled.")}> <Sparkles size={14}/> Explore Yaza</button></div>
+        <div className="top-actions">{messages.length > 0 && <button className="share-conversation-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setShareError(""); setShareUrl(""); setShareOpen(true); }} disabled={sending}><Share2 size={14}/> Share</button>}<span className="private-label"><span></span> {session ? "Cloud synced" : cloudStatus || "Private session"}</span><button className="upgrade-btn" onClick={() => setExploreOpen(true)}> <Sparkles size={14}/> Explore Yaza</button></div>
       </header>
 
       {exploreOpen && <div className="modal-backdrop explore-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setExploreOpen(false); }}>
@@ -1165,7 +1165,7 @@ function App() {
             <button type="button" onClick={() => { setImageMode(true); setExploreOpen(false); }}><ImagePlus size={17}/><span><strong>Create images</strong><small>Turn a description into an image.</small></span></button>
             <button type="button" onClick={() => { setWebSearchEnabled(true); setExploreOpen(false); }}><Globe2 size={17}/><span><strong>Web search</strong><small>Bring current information into chats.</small></span></button>
             <button type="button" onClick={() => { setExploreOpen(false); setTimeout(() => fileInputRef.current?.click(), 0); }}><Plus size={17}/><span><strong>Work with files</strong><small>Ask questions about documents and images.</small></span></button>
-            <button type="button" onClick={() => { setExploreOpen(false); toggleVoiceInput(); }}><Mic size={17}/><span><strong>Voice conversations</strong><small>Speak your prompt and listen to replies.</small></span></button>
+            <button type="button" onClick={() => { setExploreOpen(false); toggleVoiceInput(); }}><Mic size={17}/><span><strong>Voice input</strong><small>Speak your prompt using your microphone.</small></span></button>
           </div>
           <p className="explore-dialog-footnote">Choose a mode or tool to jump straight into a new way of working with Yaza.</p>
         </section>
