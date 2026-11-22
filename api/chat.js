@@ -13,7 +13,7 @@ const PROVIDERS = {
 const ALLOWED_MODELS = {
   openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
+  openrouter: ["openrouter/free"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
   yaza: ["wachabe"]
 };
@@ -137,6 +137,7 @@ export default async function handler(req, res) {
   let provider = requestedProvider;
   let model = typeof req.body?.model === "string" && req.body.model.length < 120
     ? req.body.model : "";
+  if (requestedProvider === "openrouter") model = "openrouter/free";
   const publicModelKey = requestedProvider + "/" + model;
   if (!ALLOWED_MODELS[requestedProvider]?.includes(model)) {
     return res.status(400).json({ error: "That model is not enabled for this provider." });
@@ -207,63 +208,77 @@ export default async function handler(req, res) {
     + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0);
   const imageCount = attachments.filter(file => file.kind === "image").length;
   const inputTokenEstimate = estimateTokens(inputCharacters) + imageCount * 1024;
-  const { data: pricing, error: pricingError } = await quotaContext.admin.from("model_pricing")
-    .select("enabled,pricing_mode,input_rate_per_1k_mwk,output_rate_per_1k_mwk,message_rate_mwk")
-    .eq("model_key", publicModelKey).maybeSingle();
-  if (pricingError) {
-    console.error("Yaza model pricing lookup error:", pricingError.message);
-    return res.status(503).json({ error: "Model billing is temporarily unavailable. Please try again shortly." });
-  }
-  if (!pricing?.enabled) {
-    return res.status(403).json({ error: "This model is not currently available for paid use. Please choose another model or contact the Yaza administrator." });
-  }
-  const inputRate = Number(pricing.input_rate_per_1k_mwk || 0);
-  const outputRate = Number(pricing.output_rate_per_1k_mwk || 0);
-  const messageRate = Number(pricing.message_rate_mwk || 0);
-  const pricingMode = pricing.pricing_mode;
-  if (!["tokens", "message"].includes(pricingMode)
-    || ![inputRate, outputRate, messageRate].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)
-    || (pricingMode === "tokens" && inputRate + outputRate <= 0)
-    || (pricingMode === "message" && messageRate <= 0)) {
-    return res.status(503).json({ error: "This model's billing configuration is invalid. Please contact the Yaza administrator." });
-  }
-  const outputTokenReserve = pricingMode === "tokens" ? 4096 : 0;
-  const reserveMwk = pricingMode === "message"
-    ? messageRate
-    : ((inputTokenEstimate * 1.25 * inputRate) + (outputTokenReserve * outputRate)) / 1000;
-  const reserveMinor = Math.ceil(reserveMwk * 100);
-  const usageId = randomUUID();
-  const { data: reserveRows, error: reserveError } = await quotaContext.admin.rpc("reserve_yaza_usage", {
-    p_usage_id: usageId, p_user_id: quotaContext.userId, p_model_key: publicModelKey,
-    p_provider: provider, p_model: model, p_pricing_mode: pricingMode,
-    p_reserved_minor: reserveMinor, p_input_tokens: Math.ceil(inputTokenEstimate * 1.25),
-    p_output_token_reserve: outputTokenReserve, p_input_rate: inputRate,
-    p_output_rate: outputRate, p_message_rate: messageRate
-  });
-  if (reserveError) {
-    console.error("Yaza wallet reservation error:", reserveError.message);
-    return res.status(503).json({ error: "Wallet billing is temporarily unavailable. Please try again." });
-  }
-  const reservation = Array.isArray(reserveRows) ? reserveRows[0] : reserveRows;
-  if (!reservation?.allowed) {
-    return res.status(402).json({
-      error: "Your wallet balance is too low for this request. Add funds to continue.",
-      walletBalanceMinor: Number(reservation?.balance_minor || 0),
-      requiredMinor: reserveMinor
+  const freeOpenRouter = provider === "openrouter";
+  let pricingMode = "free";
+  let inputRate = 0;
+  let outputRate = 0;
+  let messageRate = 0;
+  let outputTokenReserve = 0;
+  let reserveMinor = 0;
+  let usageId = null;
+
+  if (!freeOpenRouter) {
+    const { data: pricing, error: pricingError } = await quotaContext.admin.from("model_pricing")
+      .select("enabled,pricing_mode,input_rate_per_1k_mwk,output_rate_per_1k_mwk,message_rate_mwk")
+      .eq("model_key", publicModelKey).maybeSingle();
+    if (pricingError) {
+      console.error("Yaza model pricing lookup error:", pricingError.message);
+      return res.status(503).json({ error: "Model billing is temporarily unavailable. Please try again shortly." });
+    }
+    if (!pricing?.enabled) {
+      return res.status(403).json({ error: "This model is not currently available for paid use. Please choose another model or contact the Yaza administrator." });
+    }
+    inputRate = Number(pricing.input_rate_per_1k_mwk || 0);
+    outputRate = Number(pricing.output_rate_per_1k_mwk || 0);
+    messageRate = Number(pricing.message_rate_mwk || 0);
+    pricingMode = pricing.pricing_mode;
+    if (!["tokens", "message"].includes(pricingMode)
+      || ![inputRate, outputRate, messageRate].every(value => Number.isFinite(value) && value >= 0 && value <= 1000000)
+      || (pricingMode === "tokens" && inputRate + outputRate <= 0)
+      || (pricingMode === "message" && messageRate <= 0)) {
+      return res.status(503).json({ error: "This model's billing configuration is invalid. Please contact the Yaza administrator." });
+    }
+    outputTokenReserve = pricingMode === "tokens" ? 4096 : 0;
+    const reserveMwk = pricingMode === "message"
+      ? messageRate
+      : ((inputTokenEstimate * 1.25 * inputRate) + (outputTokenReserve * outputRate)) / 1000;
+    reserveMinor = Math.ceil(reserveMwk * 100);
+    usageId = randomUUID();
+    const { data: reserveRows, error: reserveError } = await quotaContext.admin.rpc("reserve_yaza_usage", {
+      p_usage_id: usageId, p_user_id: quotaContext.userId, p_model_key: publicModelKey,
+      p_provider: provider, p_model: model, p_pricing_mode: pricingMode,
+      p_reserved_minor: reserveMinor, p_input_tokens: Math.ceil(inputTokenEstimate * 1.25),
+      p_output_token_reserve: outputTokenReserve, p_input_rate: inputRate,
+      p_output_rate: outputRate, p_message_rate: messageRate
     });
+    if (reserveError) {
+      console.error("Yaza wallet reservation error:", reserveError.message);
+      return res.status(503).json({ error: "Wallet billing is temporarily unavailable. Please try again." });
+    }
+    const reservation = Array.isArray(reserveRows) ? reserveRows[0] : reserveRows;
+    if (!reservation?.allowed) {
+      return res.status(402).json({
+        error: "Your wallet balance is too low for this request. Add funds to continue.",
+        walletBalanceMinor: Number(reservation?.balance_minor || 0),
+        requiredMinor: reserveMinor
+      });
+    }
   }
-  const billingContext = { usageId, reservedMinor: reserveMinor, pricingMode, inputRate, outputRate, messageRate, outputTokenReserve };
+
   let outputCharacters = 0;
   let promptTokens = null;
   let completionTokens = null;
   let reportedCostUsd = null;
-  let billedAmountMinor = null;
-  let billingStatus = "reserved";
+  let billedAmountMinor = freeOpenRouter ? 0 : null;
+  let billingStatus = freeOpenRouter ? "free" : "reserved";
   let usageRecorded = false;
   const saveUsage = async status => {
     if (usageRecorded) return;
     usageRecorded = true;
-    if (status === "completed") {
+    if (freeOpenRouter) {
+      billedAmountMinor = 0;
+      billingStatus = status === "completed" ? "free" : "free_no_charge";
+    } else if (status === "completed") {
       const billedInputTokens = Number.isFinite(promptTokens) ? promptTokens : inputTokenEstimate;
       const billedOutputTokens = Number.isFinite(completionTokens) ? completionTokens : estimateTokens(outputCharacters);
       const calculatedMinor = pricingMode === "message"
