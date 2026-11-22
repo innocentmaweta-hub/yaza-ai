@@ -13,4 +13,9 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Validate serverless API JavaScript
+        run: |
+          for file in api/*.js lib/*.js; do
+            node --check "$file"
+          done
       - run: npm run build
