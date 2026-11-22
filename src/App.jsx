@@ -179,11 +179,12 @@ function App() {
     let chat = activeChat;
     if (!chat) { chat = makeChat(); setChats([chat]); setActiveId(chat.id); }
     const userMessage = { id: crypto.randomUUID(), role: "user", content };
+    const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, streaming: true };
     const nextMessages = [...chat.messages, userMessage];
     updateChat(chat.id, c => ({
       ...c,
       title: c.messages.length ? c.title : content.slice(0, 42) + (content.length > 42 ? "…" : ""),
-      messages: [...c.messages, userMessage]
+      messages: [...c.messages, userMessage, assistantMessage]
     }));
     setPrompt("");
     setSending(true);
@@ -194,12 +195,62 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, model, messages: nextMessages.map(({ role, content }) => ({ role, content })) })
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Something went wrong.");
-      updateChat(chat.id, c => ({ ...c, messages: [...c.messages, { id: crypto.randomUUID(), role: "assistant", content: data.answer, provider: data.provider, model: data.model }] }));
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Something went wrong.");
+      }
+      if (!response.body) throw new Error("Streaming is not supported by this browser. Please refresh and try again.");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let answer = "";
+      let streamError = "";
+      let completed = false;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\\n\\n");
+        buffer = events.pop() || "";
+        for (const event of events) {
+          const line = event.split("\\n").find(part => part.startsWith("data: "));
+          if (!line) continue;
+          const payload = JSON.parse(line.slice(6));
+          if (payload.delta) {
+            answer += payload.delta;
+            updateChat(chat.id, c => ({
+              ...c,
+              messages: c.messages.map(m => m.id === assistantMessage.id ? { ...m, content: answer } : m)
+            }));
+          }
+          if (payload.error) streamError = payload.error;
+          if (payload.done) completed = true;
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer.trim().startsWith("data: ")) {
+        const payload = JSON.parse(buffer.trim().slice(6));
+        if (payload.delta) answer += payload.delta;
+        if (payload.error) streamError = payload.error;
+        if (payload.done) completed = true;
+      }
+      if (answer) {
+        updateChat(chat.id, c => ({
+          ...c,
+          messages: c.messages.map(m => m.id === assistantMessage.id
+            ? { ...m, content: answer, provider, model, streaming: false }
+            : m)
+        }));
+      } else {
+        updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
+      }
+      if (streamError) setNotice(streamError);
+      else if (!completed) setNotice("The response stream ended unexpectedly. Any text received has been kept.");
     } catch (error) {
+      updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
       setNotice(error.message || "Unable to reach Yaza AI.");
-      updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== userMessage.id) }));
       setPrompt(content);
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
@@ -272,9 +323,8 @@ function App() {
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
-            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.content}</div>{m.role === "assistant" && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
+            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
           </article>)}
-          {sending && <article className="message assistant"><div className="message-avatar"><Sparkles size={16}/></div><div className="message-body"><div className="message-author">Yaza AI</div><div className="typing"><i></i><i></i><i></i><span>Thinking</span></div></div></article>}
           <div ref={endRef}/>
         </div>}
       </section>
