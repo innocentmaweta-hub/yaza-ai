@@ -757,6 +757,7 @@ function App() {
     setSending(true);
     setNotice("");
     let userMessage;
+    let previousUserMessage = null;
     let savedAttachments = [];
     let usageChoiceRequired = false;
     try {
@@ -788,7 +789,7 @@ function App() {
         }
         savedAttachments.push({ id: file.id, name: file.name, type: file.type, kind: file.kind, path });
       }
-      const previousUserMessage = replaceMessageId ? chat.messages.find(message => message.id === replaceMessageId && message.role === "user") : null;
+      previousUserMessage = replaceMessageId ? chat.messages.find(message => message.id === replaceMessageId && message.role === "user") : null;
       if (replaceMessageId && !previousUserMessage) throw new Error("That prompt could not be found. Please refresh and try again.");
       userMessage = previousUserMessage
         ? { ...previousUserMessage, content: messageContent }
@@ -821,7 +822,7 @@ function App() {
         const data = await response.json().catch(() => ({}));
         if (response.status === 402 || response.status === 429) {
           usageChoiceRequired = true;
-          setUsageChoicePending({ text: content, replaceMessageId: null });
+          setUsageChoicePending({ text: content, replaceMessageId });
           setUsageChoiceReason(response.status === 402
             ? "Your wallet does not have enough usage for this request."
             : "Your included Yaza usage limit has been reached.");
@@ -869,7 +870,7 @@ function App() {
       else if (!completed) setNotice("The response stream ended unexpectedly. Any text received has been kept.");
     } catch (error) {
       if (usageChoiceRequired) {
-        updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id && m.id !== userMessageId) }));
+        updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id && (replaceMessageId || m.id !== userMessageId)).map(m => m.id === userMessageId && previousUserMessage ? previousUserMessage : m) }));
         if (savedAttachments.length && supabase) await supabase.storage.from("chat-attachments").remove(savedAttachments.map(item => item.path)).catch(() => {});
         setNotice("");
         setPrompt(content);
