@@ -13,7 +13,7 @@ import {
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const PROVIDERS = {
-  openai: { label: "OpenAI", models: [{ id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
+  openai: { label: "OpenAI", models: [{ id: "gpt-6.2-astra", label: "GPT-6.2 Astra" }, { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" }, { id: "gpt-4.1-mini", label: "GPT-4.1 mini" }, { id: "gpt-4.1", label: "GPT-4.1" }, { id: "o4-mini", label: "o4-mini" }] },
   gemini: { label: "Gemini", models: [{ id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }] },
   openrouter: { label: "OpenRouter (free)", models: [{ id: "openrouter/free", label: "Free model (automatic)" }] },
   kimi: { label: "Kimi", models: [{ id: "moonshot-v1-8k", label: "Kimi 8K" }, { id: "moonshot-v1-32k", label: "Kimi 32K" }, { id: "moonshot-v1-128k", label: "Kimi 128K" }] },
