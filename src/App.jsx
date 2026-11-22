@@ -277,15 +277,19 @@ function App() {
     setNotice("");
     let userMessage;
     try {
-      const savedAttachments = await Promise.all(pendingAttachments.map(async file => {
+      const savedAttachments = [];
+      for (const file of pendingAttachments) {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "attachment";
         const path = `${session.user.id}/${chat.id}/${userMessageId}/${file.id}-${safeName}`;
         const { error } = await supabase.storage.from("chat-attachments").upload(path, file.file, {
           contentType: file.type || "text/plain", upsert: false
         });
-        if (error) throw new Error(`Could not save ${file.name}: ${error.message}`);
-        return { id: file.id, name: file.name, type: file.type, kind: file.kind, path };
-      }));
+        if (error) {
+          if (savedAttachments.length) await supabase.storage.from("chat-attachments").remove(savedAttachments.map(item => item.path));
+          throw new Error(`Could not save ${file.name}: ${error.message}`);
+        }
+        savedAttachments.push({ id: file.id, name: file.name, type: file.type, kind: file.kind, path });
+      }
       userMessage = { id: userMessageId, role: "user", content: messageContent, attachments: savedAttachments };
       const nextMessages = [...chat.messages, userMessage];
       updateChat(chat.id, c => ({
@@ -348,7 +352,7 @@ function App() {
       }
       setNotice(error.message || "Unable to send your message.");
       setPrompt(content);
-      setAttachments(pendingAttachments);
+      if (!userMessage) setAttachments(pendingAttachments);
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
 
