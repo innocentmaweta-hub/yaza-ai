@@ -48,7 +48,15 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(503).json({ error: `${provider} is not configured yet. Add ${config.key} in your deployment environment.` });
 
   const messages = cleanMessages(req.body?.messages);
-  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, 5) : [];
+  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments.slice(0, 10) : [];
+  if (attachments.filter(file => file?.kind === "image").length > 10) {
+    return res.status(400).json({ error: "Too many image pages. Attach fewer scanned pages and try again." });
+  }
+  const imagePayloadBytes = attachments.filter(file => file?.kind === "image" && typeof file.data === "string")
+    .reduce((total, file) => total + Math.ceil(file.data.length * 0.75), 0);
+  if (imagePayloadBytes > 2.8 * 1024 * 1024) {
+    return res.status(413).json({ error: "The scanned pages are too large to send together. Attach fewer pages or use a smaller PDF." });
+  }
   for (const file of attachments) {
     if (!file || typeof file.name !== "string" || file.name.length > 180) {
       return res.status(400).json({ error: "One of the attached files is invalid." });
