@@ -40,3 +40,29 @@
 /* Image creation mode */
 .tool-btn:disabled{opacity:.45;cursor:not-allowed}
 .sent-attachment{border-radius:8px;display:inline-flex;align-items:center;gap:6px}
+
+
+/* User-controlled long-term memory */
+.memory-nav-btn{height:38px;margin-top:8px;padding:0 11px;display:flex;align-items:center;gap:10px;border:1px solid #34353e;border-radius:9px;background:transparent;color:#b9bac3;font-size:12px;text-align:left}
+.memory-nav-btn:hover{background:#24252c;color:#f0a27f}
+.memory-count{margin-left:auto;color:#92939d;font-size:10px}
+.memory-dialog{position:relative;width:min(100%,540px);max-height:min(86vh,760px);overflow:auto;padding:32px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:#17191e;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+.memory-dialog h2{margin:0 0 8px;color:#f5f3f1;font-size:23px}
+.memory-dialog>p{margin:0 0 20px;color:#9b9da6;font-size:13px;line-height:1.55}
+.memory-form{display:flex;flex-direction:column;gap:8px}
+.memory-form label,.memory-list-title{color:#c9c9ce;font-size:11px;font-weight:700;letter-spacing:.5px}
+.memory-form textarea{width:100%;resize:vertical;min-height:82px;padding:11px 12px;border:1px solid rgba(255,255,255,.12);border-radius:10px;outline:none;color:#f5f3f1;background:#101216;font:inherit;font-size:12px;line-height:1.5}
+.memory-form textarea:focus{border-color:#d9896b}
+.memory-form-footer{display:flex;align-items:center;justify-content:space-between;color:#858691;font-size:10px}
+.memory-form-footer .auth-submit{margin:0;padding:9px 13px;font-size:11px}
+.memory-list-title{margin:22px 0 9px;color:#999aa4}
+.memory-list{display:grid;gap:8px}
+.memory-item{padding:11px 12px;border:1px solid #35363f;border-radius:10px;background:#202127}
+.memory-item p{margin:0;color:#d7d7de;font-size:12px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.memory-item>div{display:flex;justify-content:flex-end;gap:12px;margin-top:8px}
+.memory-item button{padding:2px 0;border:0;background:none;color:#e6a07f;font-size:10px}
+.memory-item button:last-child{color:#d18b85}
+.memory-item button:disabled{opacity:.5}
+.memory-empty{padding:18px;border:1px dashed #41424c;border-radius:10px;color:#858691;text-align:center;font-size:11px}
+.memory-footnote{margin-top:17px;color:#777984;font-size:10px;line-height:1.5}
+@media(max-width:520px){.memory-dialog{padding:25px 18px}.memory-dialog h2{font-size:21px}}
