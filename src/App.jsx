@@ -71,6 +71,10 @@ function App() {
   const [memoryDraft, setMemoryDraft] = useState("");
   const [editingMemoryId, setEditingMemoryId] = useState(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
+  const [adminAccess, setAdminAccess] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminData, setAdminData] = useState(null);
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const activeChat = chats.find(c => c.id === activeId) || chats[0];
@@ -92,12 +96,13 @@ function App() {
       if (data.session?.user) {
         await loadCloudChats(data.session.user.id);
         await loadCloudMemories();
+        await checkAdminAccess(data.session);
       } else setCloudReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession || null);
-      if (!nextSession) { setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); }
-      else { setCloudReady(false); setTimeout(async () => { await loadCloudChats(nextSession.user.id); await loadCloudMemories(); }, 0); }
+      if (!nextSession) { setCloudReady(true); setCloudStatus("Signed out"); setMemories([]); setAdminAccess(false); setAdminData(null); setAdminOpen(false); }
+      else { setCloudReady(false); setTimeout(async () => { await loadCloudChats(nextSession.user.id); await loadCloudMemories(); await checkAdminAccess(nextSession); }, 0); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
@@ -155,6 +160,28 @@ function App() {
     const timer = setTimeout(persist, 700);
     return () => clearTimeout(timer);
   }, [chats, session, cloudReady]);
+
+  async function checkAdminAccess(currentSession) {
+    if (!currentSession?.access_token) { setAdminAccess(false); return; }
+    try {
+      const response = await fetch("/api/admin", { headers: { Authorization: "Bearer " + currentSession.access_token } });
+      const data = await response.json().catch(() => ({}));
+      setAdminAccess(response.ok && data.isAdmin === true);
+    } catch { setAdminAccess(false); }
+  }
+
+  async function openAdminDashboard() {
+    if (!session?.access_token || adminBusy) return;
+    setAdminBusy(true);
+    setAdminOpen(true);
+    try {
+      const response = await fetch("/api/admin", { headers: { Authorization: "Bearer " + session.access_token } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not load the admin dashboard.");
+      setAdminData(data);
+    } catch (error) { setNotice(error.message || "Could not load the admin dashboard."); setAdminOpen(false); }
+    finally { setAdminBusy(false); }
+  }
 
   async function loadCloudMemories() {
     if (!supabase) return;
@@ -625,6 +652,7 @@ function App() {
       </div>
       <button className="new-chat-btn" onClick={newChat}><SquarePen size={17}/> <span>New chat</span><span className="shortcut">⌘ K</span></button>
       <button className="memory-nav-btn" onClick={() => { if (!session?.user) { setAuthMode("signin"); setAuthOpen(true); return; } setMemoryOpen(true); }}><Sparkles size={16}/> <span>Memory</span><span className="memory-count">{memories.length}</span></button>
+      {adminAccess && <button className="memory-nav-btn admin-nav-btn" onClick={openAdminDashboard}><Settings2 size={16}/> <span>Admin dashboard</span></button>}
       <div className="side-search"><Search size={15}/><input className="search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search chats"/><span>⌘K</span></div>
       <div className="history-label">YOUR CHATS</div>
       <div className="chat-list">
@@ -689,6 +717,34 @@ function App() {
         <p className="disclaimer">Images, scanned PDFs, Word files and text documents supported · Scanned pages are read using your selected AI model · Yaza AI can make mistakes. Check important information.</p>
       </footer>
     </main>
+
+    {adminOpen && <div className="auth-backdrop admin-backdrop" onClick={() => setAdminOpen(false)}>
+      <section className="admin-dialog" onClick={event => event.stopPropagation()}>
+        <button className="auth-close" onClick={() => setAdminOpen(false)} aria-label="Close"><X size={18}/></button>
+        <div className="admin-heading"><div className="auth-mark"><Settings2 size={21}/></div><div><h2>Yaza administration</h2><p>Private platform overview. Message contents and passwords are never displayed here.</p></div></div>
+        {adminBusy && <div className="admin-loading">Loading platform statistics…</div>}
+        {adminData && <>
+          <div className="admin-stat-grid">
+            <div className="admin-stat"><span>Total users</span><strong>{adminData.stats.users}</strong></div>
+            <div className="admin-stat"><span>Conversations</span><strong>{adminData.stats.conversations}</strong></div>
+            <div className="admin-stat"><span>Messages</span><strong>{adminData.stats.messages}</strong></div>
+            <div className="admin-stat"><span>Active providers</span><strong>{adminData.providers.length}</strong></div>
+          </div>
+          <div className="admin-section-title">MODEL & PROVIDER USAGE</div>
+          <div className="admin-table">
+            <div className="admin-table-row admin-table-head"><span>Provider</span><span>Model</span><span>Messages</span></div>
+            {adminData.providers.map((item,index) => <div className="admin-table-row" key={index}><span>{item.provider}</span><span>{item.model || "Default"}</span><strong>{item.messages}</strong></div>)}
+            {!adminData.providers.length && <div className="admin-empty">No provider usage recorded yet.</div>}
+          </div>
+          <div className="admin-section-title">RECENT ACCOUNTS</div>
+          <div className="admin-users">
+            {adminData.users.map(user => <div className="admin-user" key={user.id}><div className="avatar">{(user.email?.[0] || "Y").toUpperCase()}</div><div><strong>{user.email || "No email"}</strong><span>Joined {user.created_at ? new Date(user.created_at).toLocaleDateString() : "unknown"} · Last sign-in {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : "Never"}</span></div></div>)}
+            {!adminData.users.length && <div className="admin-empty">No accounts found.</div>}
+          </div>
+          <div className="admin-footnote">Updated {new Date(adminData.generatedAt).toLocaleString()}. Account list shows the latest {adminData.users.length} users; provider counts are based on stored messages.</div>
+        </>}
+      </section>
+    </div>}
 
     {memoryOpen && <div className="auth-backdrop" onClick={() => { setMemoryOpen(false); setEditingMemoryId(null); setMemoryDraft(""); }}>
       <section className="memory-dialog" onClick={event => event.stopPropagation()}>
