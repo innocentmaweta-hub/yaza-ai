@@ -1,13 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 
+const AVAILABLE_MODELS = {
+  openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+  openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
+  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+};
+
 function reply(res, status, body) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
   return res.status(status).json(body);
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", "GET");
+  if (!["GET", "POST"].includes(req.method)) {
+    res.setHeader("Allow", "GET, POST");
     return reply(res, 405, { error: "Method not allowed." });
   }
 
@@ -32,6 +39,29 @@ export default async function handler(req, res) {
     }
 
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    if (req.method === "POST") {
+      if (req.body?.action !== "set-wachabe-model") return reply(res, 400, { error: "Unsupported admin action." });
+      const provider = String(req.body?.provider || "").toLowerCase();
+      const model = String(req.body?.model || "");
+      if (!AVAILABLE_MODELS[provider]?.includes(model)) {
+        return reply(res, 400, { error: "Choose a provider and model from the available Yaza model list." });
+      }
+      const wachabe = { provider, model };
+      const { error } = await admin.from("platform_settings").upsert({
+        setting_key: "wachabe_model", setting_value: wachabe, updated_at: new Date().toISOString()
+      }, { onConflict: "setting_key" });
+      if (error) throw error;
+      return reply(res, 200, { success: true, wachabe });
+    }
+
+    const { data: routingRow, error: routingError } = await admin.from("platform_settings")
+      .select("setting_value").eq("setting_key", "wachabe_model").maybeSingle();
+    if (routingError) throw routingError;
+    const configuredRoute = routingRow?.setting_value || { provider: "openrouter", model: "openrouter/free" };
+    const wachabe = AVAILABLE_MODELS[configuredRoute.provider]?.includes(configuredRoute.model)
+      ? configuredRoute : { provider: "openrouter", model: "openrouter/free" };
+
     const [usersResult, conversationsResult, messagesCountResult, messagesResult, usageResult] = await Promise.all([
       admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
       admin.from("conversations").select("id", { count: "exact", head: true }),
@@ -103,6 +133,7 @@ export default async function handler(req, res) {
 
     return reply(res, 200, {
       isAdmin: true,
+      wachabe: { ...wachabe, availableModels: AVAILABLE_MODELS },
       stats: {
         users: usersResult.data?.users?.length || 0,
         usersListCapped: (usersResult.data?.users?.length || 0) >= 1000,
