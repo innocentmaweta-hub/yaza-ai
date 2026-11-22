@@ -93,6 +93,7 @@ export default async function handler(req, res) {
         usageByUser.set(event.user_id, user);
       }
     }
+    const userEmails = new Map((usersResult.data?.users || []).map(user => [user.id, user.email || user.id.slice(0, 8)]));
     const users = (usersResult.data?.users || []).map(user => ({
       id: user.id,
       email: user.email || null,
@@ -121,7 +122,7 @@ export default async function handler(req, res) {
         pricedRequests,
         unpricedRequests: usageRows.length - pricedRequests,
         byModel: [...usageByModel.values()].sort((a,b) => b.requests - a.requests),
-        byUser: [...usageByUser.values()].sort((a,b) => b.requests - a.requests).slice(0,50)
+        byUser: [...usageByUser.values()].sort((a,b) => b.requests - a.requests).slice(0,50).map(item => ({ ...item, account: userEmails.get(item.userId) || item.userId.slice(0, 8) }))
       },
       quotas: {
         dailyRequests: Number.parseInt(process.env.YAZA_DAILY_REQUEST_LIMIT || "50", 10) || 50,
