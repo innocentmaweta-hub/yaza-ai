@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "./lib/supabase.js";
 import {
   ArrowDown, ArrowUp, AudioLines, Check, ChevronDown, Code2, Compass,
   FileText, Globe2, ImagePlus, Menu, MessageSquare, MoreHorizontal,
@@ -30,6 +31,14 @@ function App() {
   const [modelMenu, setModelMenu] = useState(false);
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [session, setSession] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState("");
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const activeChat = chats.find(c => c.id === activeId) || chats[0];
@@ -37,6 +46,99 @@ function App() {
   const isNew = messages.length === 0;
 
   useEffect(() => { localStorage.setItem(STORAGE, JSON.stringify(chats)); }, [chats]);
+
+  useEffect(() => {
+    if (!supabase) { setCloudStatus("Local mode"); setCloudReady(true); return; }
+    let alive = true;
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!alive) return;
+      setSession(data.session || null);
+      if (data.session?.user) await loadCloudChats(data.session.user.id);
+      else setCloudReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession || null);
+      if (!nextSession) { setCloudReady(true); setCloudStatus("Signed out"); }
+      else { setCloudReady(false); setTimeout(() => loadCloudChats(nextSession.user.id), 0); }
+    });
+    return () => { alive = false; listener.subscription.unsubscribe(); };
+  }, []);
+
+  async function loadCloudChats(userId) {
+    if (!supabase) return;
+    try {
+      const { data: rows, error } = await supabase.from("conversations").select("id,title,updated_at").eq("user_id", userId).order("updated_at", { ascending: false });
+      if (error) throw error;
+      const ids = (rows || []).map(row => row.id);
+      let messageRows = [];
+      if (ids.length) {
+        const result = await supabase.from("messages").select("id,conversation_id,role,content,provider,model,created_at").in("conversation_id", ids).order("created_at", { ascending: true });
+        if (result.error) throw result.error;
+        messageRows = result.data || [];
+      }
+      const remoteChats = (rows || []).map(row => ({
+        id: row.id, title: row.title, updatedAt: new Date(row.updated_at).getTime(),
+        messages: messageRows.filter(m => m.conversation_id === row.id).map(m => ({ id: m.id, role: m.role, content: m.content, provider: m.provider, model: m.model }))
+      }));
+      if (remoteChats.length) { setChats(remoteChats); setActiveId(remoteChats[0].id); }
+      setCloudStatus("Synced");
+    } catch (error) {
+      console.error("Yaza cloud history:", error);
+      setCloudStatus("Sync issue");
+      setNotice("Could not load cloud history. Check the Supabase database setup.");
+    } finally { setCloudReady(true); }
+  }
+
+  useEffect(() => {
+    if (!supabase || !session?.user || !cloudReady) return;
+    const persist = async () => {
+      try {
+        for (const chat of chats) {
+          const { error: conversationError } = await supabase.from("conversations").upsert({
+            id: chat.id, user_id: session.user.id, title: chat.title,
+            updated_at: new Date(chat.updatedAt || Date.now()).toISOString()
+          });
+          if (conversationError) throw conversationError;
+          if (chat.messages.length) {
+            const rows = chat.messages.map(message => ({
+              id: message.id, conversation_id: chat.id, role: message.role, content: message.content,
+              provider: message.provider || null, model: message.model || null
+            }));
+            const { error } = await supabase.from("messages").upsert(rows);
+            if (error) throw error;
+          }
+        }
+        setCloudStatus("Synced");
+      } catch (error) {
+        console.error("Yaza cloud save:", error);
+        setCloudStatus("Sync issue");
+      }
+    };
+    const timer = setTimeout(persist, 700);
+    return () => clearTimeout(timer);
+  }, [chats, session, cloudReady]);
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    if (!supabase) return;
+    setAuthBusy(true); setNotice("");
+    try {
+      const result = authMode === "signup"
+        ? await supabase.auth.signUp({ email: authEmail.trim(), password: authPassword })
+        : await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
+      if (result.error) throw result.error;
+      if (authMode === "signup" && !result.data.session) setNotice("Check your email to confirm your Yaza AI account, then sign in.");
+      else { setAuthOpen(false); setAuthPassword(""); }
+    } catch (error) { setNotice(error.message || "Authentication failed."); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
+    setSession(null);
+    setCloudStatus("Signed out");
+  }
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, sending]);
   useEffect(() => {
     const onKey = e => {
@@ -132,7 +234,7 @@ function App() {
       </div>
       <div className="side-bottom">
         <div className="plan-card"><div className="plan-icon"><Zap size={16}/></div><div><strong>Yaza AI</strong><span>Your space to think bigger.</span></div><MoreHorizontal size={17}/></div>
-        <div className="profile-row"><div className="avatar">Y</div><div className="profile-copy"><strong>Guest</strong><span>Personal workspace</span></div><Settings2 size={17}/></div>
+        <button className="profile-row profile-action" onClick={() => session ? signOut() : setAuthOpen(true)}><div className="avatar">{session ? (session.user.email?.[0] || "Y").toUpperCase() : "Y"}</div><div className="profile-copy"><strong>{session?.user?.email || "Guest"}</strong><span>{session ? "Sign out" : (supabase ? "Sign in to sync chats" : "Local workspace")}</span></div><Settings2 size={17}/></button>
       </div>
     </aside>
 
@@ -153,7 +255,7 @@ function App() {
             </div>
           </div>
         </div>
-        <div className="top-actions"><span className="private-label"><span></span> Private session</span><button className="upgrade-btn" onClick={() => setNotice("Account plans will be available when Yaza accounts are enabled.")}> <Sparkles size={14}/> Explore Yaza</button></div>
+        <div className="top-actions"><span className="private-label"><span></span> {session ? "Cloud synced" : cloudStatus || "Private session"}</span><button className="upgrade-btn" onClick={() => setNotice("Account plans will be available when Yaza accounts are enabled.")}> <Sparkles size={14}/> Explore Yaza</button></div>
       </header>
 
       <section className={`conversation ${isNew ? "welcome" : ""}`}>
@@ -185,6 +287,21 @@ function App() {
         <p className="disclaimer">Yaza AI can make mistakes. Check important information.</p>
       </footer>
     </main>
+
+    {authOpen && <div className="auth-backdrop" onClick={() => setAuthOpen(false)}>
+      <section className="auth-dialog" onClick={event => event.stopPropagation()}>
+        <button className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close"><X size={18}/></button>
+        <div className="auth-mark"><Sparkles size={21}/></div>
+        <h2>{authMode === "signup" ? "Create your Yaza account" : "Welcome back"}</h2>
+        <p>{authMode === "signup" ? "Your conversations, available wherever you sign in." : "Sign in to continue your conversations."}</p>
+        <form onSubmit={submitAuth}>
+          <label>Email address</label><input type="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" required autoComplete="email"/>
+          <label>Password</label><input type="password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="At least 6 characters" minLength={6} required autoComplete={authMode === "signup" ? "new-password" : "current-password"}/>
+          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? "Please wait…" : authMode === "signup" ? "Create account" : "Sign in"}</button>
+        </form>
+        <div className="auth-switch">{authMode === "signup" ? "Already have an account?" : "New to Yaza AI?"} <button onClick={() => setAuthMode(authMode === "signup" ? "signin" : "signup")}>{authMode === "signup" ? "Sign in" : "Create an account"}</button></div>
+      </section>
+    </div>}
   </div>;
 }
 
