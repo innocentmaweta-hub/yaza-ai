@@ -53,6 +53,7 @@ function App() {
   const [search, setSearch] = useState("");
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const recognitionRef = useRef(null);
   const voiceBasePromptRef = useRef("");
   const [notice, setNotice] = useState("");
@@ -71,7 +72,7 @@ function App() {
   const isNew = messages.length === 0;
 
   useEffect(() => { localStorage.setItem(STORAGE, JSON.stringify(chats)); }, [chats]);
-  useEffect(() => () => { try { recognitionRef.current?.stop(); } catch {} }, []);
+  useEffect(() => () => { try { recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); } catch {} }, []);
   useEffect(() => {
     localStorage.setItem(PROVIDER_SETTINGS, JSON.stringify({ provider, model }));
   }, [provider, model]);
@@ -448,6 +449,35 @@ function App() {
     }
   }
 
+  function toggleSpeak(message) {
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      setNotice("Voice output is not supported in this browser. Try the latest Google Chrome or Microsoft Edge.");
+      return;
+    }
+    if (speakingMessageId === message.id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const spokenText = String(message.content || "")
+      .replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)]+)\\)/g, "$1")
+      .replace(/https?:\\/\\/\\S+/g, "")
+      .replace(/\\bSources\\s*:?/gi, "Sources.")
+      .replace(/[*_~#>]/g, "")
+      .replace(/\\s+/g, " ")
+      .trim();
+    if (!spokenText) return;
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    utterance.lang = navigator.language || "en-US";
+    utterance.onend = () => setSpeakingMessageId(current => current === message.id ? null : current);
+    utterance.onerror = () => {
+      setSpeakingMessageId(current => current === message.id ? null : current);
+      setNotice("Voice playback stopped. Please try again.");
+    };
+    setSpeakingMessageId(message.id);
+    window.speechSynthesis.speak(utterance);
+  }
   function handleSubmit(e) { e.preventDefault(); sendMessage(); }
   function handlePromptKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -511,7 +541,7 @@ function App() {
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
-            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
+            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => toggleSpeak(m)} title={speakingMessageId === m.id ? "Stop reading" : "Read response aloud"} aria-label={speakingMessageId === m.id ? "Stop reading response" : "Read response aloud"} className={speakingMessageId === m.id ? "speaking-control" : ""}>{speakingMessageId === m.id ? <MicOff size={13}/> : <AudioLines size={13}/>} {speakingMessageId === m.id ? "Stop" : "Read aloud"}</button><button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
           </article>)}
           <div ref={endRef}/>
         </div>}
