@@ -4,7 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 const PROVIDERS = {
   openai: { key: "OPENAI_API_KEY", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" },
   gemini: { key: "GEMINI_API_KEY", model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
-  openrouter: { key: "OPENROUTER_API_KEY", model: process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash" },
+  openrouter: { key: "OPENROUTER_API_KEY", model: process.env.OPENROUTER_MODEL || "~google/gemini-flash-latest" },
   kimi: { key: "KIMI_API_KEY", model: process.env.KIMI_MODEL || "moonshot-v1-8k" }
 };
 
@@ -17,9 +17,15 @@ function cleanMessages(messages) {
 }
 
 function providerError(error) {
-  console.error("Yaza AI provider error:", error?.message || error);
-  if (error?.status === 401) return "The provider rejected its API key. Check the key in your deployment settings.";
-  if (error?.status === 429) return "This provider is currently rate-limiting requests. Please wait and try again.";
+  console.error("Yaza AI provider error:", { status: error?.status, message: error?.message || error });
+  const status = Number(error?.status || error?.code);
+  if (status === 401) return "OpenRouter rejected the API key. Check that OPENROUTER_API_KEY is correct and active.";
+  if (status === 402) return "OpenRouter has insufficient credits for this request. Check your Credits page or choose a free model.";
+  if (status === 403) return "OpenRouter denied this request. Check your account restrictions, model permissions, or content settings.";
+  if (status === 404) return "OpenRouter could not find this model or an available provider. Choose a current model from the model list.";
+  if (status === 408 || status === 504) return "The model took too long to respond. Please try again.";
+  if (status === 429) return "OpenRouter is rate-limiting requests. Please wait and try again.";
+  if (status === 502 || status === 503) return "The selected model provider is temporarily unavailable. Try another model or try again shortly.";
   return "Yaza AI could not reach that model. Check the provider, model name, and API access, then try again.";
 }
 
@@ -94,6 +100,11 @@ export default async function handler(req, res) {
 
     let hasContent = false;
     for await (const chunk of stream) {
+      if (provider !== "gemini" && chunk.error) {
+        const streamError = new Error(chunk.error.message || "The model provider returned an error.");
+        streamError.status = chunk.error.code || chunk.error.status;
+        throw streamError;
+      }
       const delta = provider === "gemini"
         ? (chunk.text || "")
         : (chunk.choices?.[0]?.delta?.content || "");
