@@ -625,7 +625,7 @@ function App() {
       }));
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: "Bearer " + session.access_token } : {}) },
         body: JSON.stringify({
           provider, model,
           memories: memories.map(item => item.content),
@@ -1051,6 +1051,19 @@ function App() {
             <div className="admin-stat"><span>Conversations</span><strong>{adminData.stats.conversations}</strong></div>
             <div className="admin-stat"><span>Messages</span><strong>{adminData.stats.messages}</strong></div>
             <div className="admin-stat"><span>Active providers</span><strong>{adminData.providers.length}</strong></div>
+          </div>
+          <div className="admin-section-title">API USAGE & COST TRACKING</div>
+          <div className="admin-stat-grid usage-admin-grid">
+            <div className="admin-stat"><span>Requests today</span><strong>{adminData.usage?.todayRequests ?? 0}</strong></div>
+            <div className="admin-stat"><span>Requests this month</span><strong>{adminData.usage?.monthRequests ?? 0}</strong></div>
+            <div className="admin-stat"><span>Estimated text tokens</span><strong>{((adminData.usage?.estimatedInputTokens || 0)+(adminData.usage?.estimatedOutputTokens || 0)).toLocaleString()}</strong></div>
+            <div className="admin-stat"><span>Provider-reported cost</span><strong>${Number(adminData.usage?.reportedCostUsd || 0).toFixed(4)}</strong></div>
+          </div>
+          <div className="admin-footnote">Limits: {adminData.quotas?.dailyRequests || 50} requests per signed-in user per day · {adminData.quotas?.monthlyRequests || 1000} per month · {adminData.quotas?.guestDailyRequests || 10} per guest per day. Token counts are estimates from text length. Cost is shown only when a provider reports it; it is not a complete bill. {adminData.usage?.unpricedRequests || 0} of {adminData.usage?.sampledEvents || 0} sampled requests have no provider cost data.{adminData.usage?.sampleMayBeTruncated ? " Usage sample is capped at the latest 10,000 events." : ""}</div>
+          <div className="admin-table usage-admin-table">
+            <div className="admin-table-row admin-table-head"><span>Provider</span><span>Model</span><span>Requests</span><span>Reported cost (USD)</span></div>
+            {(adminData.usage?.byModel || []).map((item,index) => <div className="admin-table-row" key={index}><span>{item.provider}</span><span>{item.model}</span><strong>{item.requests}</strong><strong>${Number(item.reportedCostUsd || 0).toFixed(4)}</strong></div>)}
+            {!(adminData.usage?.byModel || []).length && <div className="admin-empty">No API usage has been recorded yet.</div>}
           </div>
           <div className="admin-section-title">MODEL & PROVIDER USAGE</div>
           <div className="admin-table">
