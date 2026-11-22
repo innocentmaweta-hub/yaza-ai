@@ -25,6 +25,8 @@ function App() {
   const [provider, setProvider] = useState("openai");
   const [model, setModel] = useState(PROVIDERS.openai.models[0].id);
   const [prompt, setPrompt] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const fileInputRef = useRef(null);
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [providerMenu, setProviderMenu] = useState(false);
@@ -173,12 +175,47 @@ function App() {
     setProviderMenu(false);
     setModelMenu(false);
   }
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+      reader.readAsDataURL(file);
+    });
+  }
+  async function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const supported = files.filter(file =>
+      file.type.startsWith("image/") ||
+      /\\.(txt|md|csv|json|xml|html|css|js|jsx|ts|tsx|py|java|c|cpp|sql|log)$/i.test(file.name)
+    );
+    if (supported.length !== files.length) setNotice("Supported files: images, TXT, MD, CSV, JSON, XML, HTML, CSS, JS/TS, Python, Java, C/C++, SQL and LOG.");
+    const remaining = Math.max(0, 5 - attachments.length);
+    const chosen = supported.slice(0, remaining);
+    if (supported.length > remaining) setNotice("You can attach up to 5 files per message.");
+    try {
+      const loaded = await Promise.all(chosen.map(async file => {
+        if (file.size > 4 * 1024 * 1024) throw new Error(`${file.name} is larger than 4 MB. Please choose a smaller file.`);
+        if (file.type.startsWith("image/")) {
+          return { id: crypto.randomUUID(), name: file.name, type: file.type, kind: "image", data: await readFileAsDataUrl(file) };
+        }
+        if (file.size > 1024 * 1024) throw new Error(`${file.name} is larger than 1 MB. Please choose a smaller text file.`);
+        return { id: crypto.randomUUID(), name: file.name, type: file.type || "text/plain", kind: "text", text: await file.text() };
+      }));
+      setAttachments(old => [...old, ...loaded].slice(0, 5));
+      setNotice("");
+    } catch (error) { setNotice(error.message || "Could not read the selected file."); }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
   async function sendMessage(text = prompt) {
     const content = text.trim();
-    if (!content || sending) return;
+    if ((!content && !attachments.length) || sending) return;
+    const pendingAttachments = attachments;
+    const messageContent = content || "Please review the attached file(s).";
     let chat = activeChat;
     if (!chat) { chat = makeChat(); setChats([chat]); setActiveId(chat.id); }
-    const userMessage = { id: crypto.randomUUID(), role: "user", content };
+    const userMessage = { id: crypto.randomUUID(), role: "user", content: messageContent, attachments: pendingAttachments.map(({ id, name, type, kind }) => ({ id, name, type, kind })) };
     const assistantMessage = { id: crypto.randomUUID(), role: "assistant", content: "", provider, model, streaming: true };
     const nextMessages = [...chat.messages, userMessage];
     updateChat(chat.id, c => ({
@@ -187,13 +224,14 @@ function App() {
       messages: [...c.messages, userMessage, assistantMessage]
     }));
     setPrompt("");
+    setAttachments([]);
     setSending(true);
     setNotice("");
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, model, messages: nextMessages.map(({ role, content }) => ({ role, content })) })
+        body: JSON.stringify({ provider, model, messages: nextMessages.map(({ role, content }) => ({ role, content })), attachments: pendingAttachments.map(({ name, type, kind, data, text }) => ({ name, type, kind, data, text })) })
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -252,6 +290,7 @@ function App() {
       updateChat(chat.id, c => ({ ...c, messages: c.messages.filter(m => m.id !== assistantMessage.id) }));
       setNotice(error.message || "Unable to reach Yaza AI.");
       setPrompt(content);
+      setAttachments(pendingAttachments);
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
   function deleteChat(id) {
@@ -323,7 +362,7 @@ function App() {
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
-            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
+            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <span className="sent-attachment" key={file.id}>{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</span>)}</div>}{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
           </article>)}
           <div ref={endRef}/>
         </div>}
@@ -332,13 +371,14 @@ function App() {
       <footer className="composer-area">
         {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}><X size={14}/></button></div>}
         <form className="composer" onSubmit={handleSubmit}>
+          {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
           <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder="Message Yaza AI..." rows={1} disabled={sending}/>
           <div className="composer-bottom">
-            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => setNotice("File uploads are coming in a future update.")}><Plus size={18}/></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Web search is coming in a future update.")}><Globe2 size={15}/> <span>Search</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
-            <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={!prompt.trim() || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
+            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Web search is coming in a future update.")}><Globe2 size={15}/> <span>Search</span></button><button type="button" className="tool-btn tool-label" onClick={() => setNotice("Voice input is coming in a future update.")}><AudioLines size={15}/> <span>Voice</span></button></div>
+            <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
-        <p className="disclaimer">Yaza AI can make mistakes. Check important information.</p>
+        <p className="disclaimer">Images and text files supported · Yaza AI can make mistakes. Check important information.</p>
       </footer>
     </main>
 
