@@ -44,8 +44,11 @@ export default async function handler(req, res) {
     .select("enabled,pricing_mode,message_rate_mwk").eq("model_key","image/generation").maybeSingle();
   if (pricingError) return res.status(503).json({ error: "Image pricing is temporarily unavailable." });
   if (!pricing?.enabled) return res.status(403).json({ error: "Image generation is not currently enabled for paid use. Contact the Yaza administrator." });
-  if (pricing.pricing_mode !== "message") return res.status(400).json({ error: "Image generation must use a fixed price per image." });
-  const reserveMinor = Math.ceil(Number(pricing.message_rate_mwk || 0) * 100);
+  const imageRate = Number(pricing.message_rate_mwk || 0);
+  if (pricing.pricing_mode !== "message" || !Number.isFinite(imageRate) || imageRate <= 0 || imageRate > 1000000) {
+    return res.status(503).json({ error: "Image generation pricing is invalid. Please contact the Yaza administrator." });
+  }
+  const reserveMinor = Math.ceil(imageRate * 100);
   const usageId = randomUUID();
   const { data: reserveRows, error: reserveError } = await admin.rpc("reserve_yaza_usage", {
     p_usage_id:usageId,p_user_id:userId,p_model_key:"image/generation",p_provider:"openrouter-image",p_model:model,
