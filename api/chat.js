@@ -14,7 +14,8 @@ const ALLOWED_MODELS = {
   openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
   openrouter: ["openrouter/free", "~google/gemini-flash-latest", "google/gemini-3.7-flash", "openai/gpt-4.1", "deepseek/deepseek-r1", "anthropic/claude-sonnet-4"],
-  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+  kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+  yaza: ["wachabe"]
 };
 
 function cleanMessages(messages) {
@@ -131,10 +132,34 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed." });
   }
 
-  const provider = String(req.body?.provider || "openai").toLowerCase();
+  const requestedProvider = String(req.body?.provider || "openai").toLowerCase();
+  let provider = requestedProvider;
+  let model = typeof req.body?.model === "string" && req.body.model.length < 120
+    ? req.body.model : "";
+  if (!ALLOWED_MODELS[requestedProvider]?.includes(model)) {
+    return res.status(400).json({ error: "That model is not enabled for this provider." });
+  }
+
+  if (requestedProvider === "yaza") {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceKey) return res.status(503).json({ error: "Yaza AI routing is not configured. Please contact the administrator." });
+    try {
+      const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data, error } = await admin.from("platform_settings").select("setting_value").eq("setting_key", "wachabe_model").maybeSingle();
+      if (error) throw error;
+      const route = data?.setting_value || { provider: "openrouter", model: "openrouter/free" };
+      if (!ALLOWED_MODELS[route.provider]?.includes(route.model)) throw new Error("The configured Wachabe model is invalid.");
+      provider = route.provider;
+      model = route.model;
+    } catch (error) {
+      console.error("Yaza Wachabe routing error:", error?.message || error);
+      return res.status(503).json({ error: "Wachabe is temporarily unavailable because its model configuration could not be loaded." });
+    }
+  }
+
   const config = PROVIDERS[provider];
   if (!config) return res.status(400).json({ error: "Unsupported AI provider." });
-
   const apiKey = process.env[config.key];
   if (!apiKey) return res.status(503).json({ error: `${provider} is not configured yet. Add ${config.key} in your deployment environment.` });
 
@@ -163,8 +188,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Please send a message first." });
   }
 
-  const model = typeof req.body?.model === "string" && req.body.model.length < 120
-    ? req.body.model : config.model;
+  if (!model) model = config.model;
   if (!ALLOWED_MODELS[provider]?.includes(model)) {
     return res.status(400).json({ error: "That model is not enabled for this provider." });
   }
