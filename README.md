@@ -3,7 +3,7 @@
 Yaza AI is a standalone multi-provider AI chat website. It is designed to work with OpenAI, Google Gemini, OpenRouter, and Moonshot Kimi through server-side API routes.
 
 ## Local development
-
+ 
 1. Install Node.js 20 or later.
 2. Run `npm install`.
 3. Copy `.env.example` to `.env.local` and add at least one provider API key.
