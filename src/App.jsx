@@ -170,6 +170,13 @@ function App() {
   const [usageData, setUsageData] = useState(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState("");
+  const [walletData, setWalletData] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState("");
+  const [topupAmount, setTopupAmount] = useState("1000");
+  const [topupBusy, setTopupBusy] = useState(false);
+  const [pricingDrafts, setPricingDrafts] = useState({});
+  const [pricingSaving, setPricingSaving] = useState({});
   const endRef = useRef(null);
   const textareaRef = useRef(null);
   const activeChat = chats.find(c => c.id === activeId) || chats[0];
@@ -328,6 +335,7 @@ function App() {
       setAdminData(data);
       setWachabeProvider(data.wachabe?.provider || "openrouter");
       setWachabeModel(data.wachabe?.model || "openrouter/free");
+      setPricingDrafts(Object.fromEntries((data.modelPricing || []).map(item => [item.model_key, { ...item }])));
     } catch (error) { setNotice(error.message || "Could not load the admin dashboard."); setAdminOpen(false); }
     finally { setAdminBusy(false); }
   }
@@ -350,6 +358,40 @@ function App() {
     } finally { setWachabeSaving(false); }
   }
 
+  function updatePricingDraft(modelKey, field, value) {
+    setPricingDrafts(current => ({ ...current, [modelKey]: { ...(current[modelKey] || {}), [field]: value } }));
+  }
+
+  async function saveModelPricing(modelKey) {
+    if (!session?.access_token || pricingSaving[modelKey]) return;
+    const draft = pricingDrafts[modelKey]; if (!draft) return;
+    setPricingSaving(current => ({ ...current, [modelKey]: true }));
+    try {
+      const response = await fetch("/api/admin", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + session.access_token },
+        body:JSON.stringify({ action:"save-model-pricing", model_key:modelKey, enabled:draft.enabled===true, pricing_mode:draft.pricing_mode||"tokens", input_rate_per_1k_mwk:Number(draft.input_rate_per_1k_mwk||0), output_rate_per_1k_mwk:Number(draft.output_rate_per_1k_mwk||0), message_rate_mwk:Number(draft.message_rate_mwk||0) }) });
+      const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Could not save model pricing.");
+      setAdminData(current => current ? { ...current, modelPricing:(current.modelPricing||[]).map(item => item.model_key===modelKey ? { ...data.pricing, label:item.label } : item) } : current);
+      setPricingDrafts(current => ({ ...current, [modelKey]:{ ...data.pricing, label:draft.label } })); setNotice("Pricing saved for " + modelKey + ".");
+    } catch (error) { setNotice(error.message || "Could not save model pricing."); }
+    finally { setPricingSaving(current => ({ ...current, [modelKey]:false })); }
+  }
+
+  async function loadWallet() {
+    if (!session?.access_token) { setWalletData(null); setWalletError("Sign in to use your Yaza wallet."); return; }
+    setWalletLoading(true); setWalletError("");
+    try { const response = await fetch("/api/wallet", { headers:{ Authorization:"Bearer " + session.access_token } }); const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not load your wallet."); setWalletData(data);
+    } catch (error) { setWalletError(error.message || "Could not load your wallet."); } finally { setWalletLoading(false); }
+  }
+
+  async function startWalletTopup() {
+    if (!session?.access_token || topupBusy) { if (!session?.access_token) { setAuthMode("signin"); setAuthOpen(true); } return; }
+    const amount = Number(topupAmount); if (!Number.isSafeInteger(amount) || amount < 500 || amount > 500000) { setWalletError("Enter a whole amount between MK 500 and MK 500,000."); return; }
+    setTopupBusy(true); setWalletError("");
+    try { const response = await fetch("/api/payments/create", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + session.access_token }, body:JSON.stringify({ amount }) });
+      const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Could not start PayChangu checkout."); window.location.assign(data.checkoutUrl);
+    } catch (error) { setWalletError(error.message || "Could not start PayChangu checkout."); setTopupBusy(false); }
+  }
   async function loadUsageReport() {
     if (!session?.access_token) { setUsageData(null); setUsageError("Sign in to view account usage."); return; }
     setUsageLoading(true); setUsageError("");
