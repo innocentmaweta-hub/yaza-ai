@@ -462,11 +462,10 @@ function App() {
     }
     window.speechSynthesis.cancel();
     const spokenText = String(message.content || "")
-      .replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)]+)\\)/g, "$1")
-      .replace(/https?:\\/\\/\\S+/g, "")
-      .replace(/\\bSources\\s*:?/gi, "Sources.")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/\bSources\s*:?/gi, "Sources.")
       .replace(/[*_~#>]/g, "")
-      .replace(/\\s+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
     if (!spokenText) return;
     const utterance = new SpeechSynthesisUtterance(spokenText);
