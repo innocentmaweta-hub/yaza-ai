@@ -268,3 +268,18 @@
 .theme-light .suggestion-icon{background:#f8efec;border-color:#eadbd4}
 .theme-light .composer{box-shadow:0 8px 28px #34364a12}
 .theme-light .notice{background:#fff7f4;border-color:#e7c9bb;color:#89533f}
+
+
+/* Conversation management */
+.history-heading{display:flex;align-items:center;justify-content:space-between;padding:0 4px 8px 9px}
+.history-heading .history-label{padding:0}
+.history-view-toggle{border:0;background:transparent;color:#d99578;font-size:10px;padding:3px 5px}
+.history-view-toggle:hover{color:#f2b294}
+.chat-row-actions{display:flex;align-items:center;gap:1px;padding-right:3px}
+.chat-action{width:25px;height:26px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:#777984;padding:0}
+.chat-row:hover .chat-action,.chat-row.selected .chat-action{display:grid}
+.chat-action:hover{background:#34353e;color:#f0a17f}
+.chat-delete{display:none}
+.theme-light .history-view-toggle{color:#a65d43}
+.theme-light .chat-action{color:#777985}
+.theme-light .chat-action:hover{background:#ececf1;color:#9e5c43}
