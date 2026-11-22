@@ -19,7 +19,7 @@ const ALLOWED_MODELS = {
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
   claude: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
   deepseek: ["deepseek-flash", "deepseek-v4-pro"],
-  yaza: ["wachabe"]
+  yaza: ["wachabe", "last-choice"]
 };
 
 function cleanMessages(messages) {
@@ -206,14 +206,17 @@ export default async function handler(req, res) {
     if (!url || !serviceKey) return res.status(503).json({ error: "Yaza AI routing is not configured. Please contact the administrator." });
     try {
       const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { data, error } = await admin.from("platform_settings").select("setting_value").eq("setting_key", "wachabe_model").maybeSingle();
-      if (error) throw error;
-      const route = lastChoiceRequest
-        ? { provider: "openrouter", model: "openrouter/free" }
-        : (data?.setting_value || { provider: "openrouter", model: "openrouter/free" });
-      if (!ALLOWED_MODELS[route.provider]?.includes(route.model)) throw new Error("The configured Yaza AI model is invalid.");
-      provider = route.provider;
-      model = route.model;
+      if (lastChoiceRequest) {
+        provider = "openrouter";
+        model = "openrouter/free";
+      } else {
+        const { data, error } = await admin.from("platform_settings").select("setting_value").eq("setting_key", "wachabe_model").maybeSingle();
+        if (error) throw error;
+        const route = data?.setting_value || { provider: "openrouter", model: "openrouter/free" };
+        if (!ALLOWED_MODELS[route.provider]?.includes(route.model)) throw new Error("The configured Wachabe model is invalid.");
+        provider = route.provider;
+        model = route.model;
+      }
     } catch (error) {
       console.error("Yaza Wachabe routing error:", error?.message || error);
       return res.status(503).json({ error: "Wachabe is temporarily unavailable because its model configuration could not be loaded." });
