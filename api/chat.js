@@ -263,7 +263,8 @@ export default async function handler(req, res) {
     + attachments.reduce((sum, file) => sum + (typeof file.text === "string" ? file.text.length : 0), 0);
   const imageCount = attachments.filter(file => file.kind === "image").length;
   const inputTokenEstimate = estimateTokens(inputCharacters) + imageCount * 1024;
-  const freeOpenRouter = provider === "openrouter";
+  // Only direct OpenRouter selections are free. Wachabe keeps its own customer-facing pricing even when routed through OpenRouter.
+  const freeOpenRouter = requestedProvider === "openrouter";
   let pricingMode = "free";
   let inputRate = 0;
   let outputRate = 0;
