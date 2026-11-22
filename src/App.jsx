@@ -164,6 +164,7 @@ function App() {
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [adminAccess, setAdminAccess] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [adminTab, setAdminTab] = useState("overview");
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminData, setAdminData] = useState(null);
   const [wachabeProvider, setWachabeProvider] = useState("openrouter");
@@ -1135,18 +1136,34 @@ function App() {
       </footer>
     </main>
 
-    {adminOpen && <div className="auth-backdrop admin-backdrop" onClick={() => setAdminOpen(false)}>
-      <section className="admin-dialog" onClick={event => event.stopPropagation()}>
-        <button className="auth-close" onClick={() => setAdminOpen(false)} aria-label="Close"><X size={18}/></button>
-        <div className="admin-heading"><div className="auth-mark"><Settings2 size={21}/></div><div><h2>Yaza administration</h2><p>Private platform overview. Message contents and passwords are never displayed here.</p></div></div>
-        {adminBusy && <div className="admin-loading">Loading platform statistics…</div>}
-        {adminData && <>
+    {adminOpen && <div className="settings-page-backdrop admin-page-backdrop" onClick={() => setAdminOpen(false)}>
+      <section className="settings-page admin-page" onClick={event => event.stopPropagation()}>
+        <aside className="settings-sidebar">
+          <div className="settings-sidebar-top">
+            <div className="settings-sidebar-brand"><div className="auth-mark"><Settings2 size={19}/></div><div><strong>Admin Center</strong><span>Yaza AI management</span></div></div>
+            <button className="settings-close" onClick={() => setAdminOpen(false)} aria-label="Close admin dashboard"><X size={18}/></button>
+          </div>
+          <nav className="settings-nav" aria-label="Admin sections">
+            {[["overview","Overview"],["models","AI models & pricing"],["billing","Payments & wallet"],["usage","Usage & costs"],["accounts","User accounts"]].map(([id,label]) => <button key={id} className={adminTab===id?"active":""} onClick={() => setAdminTab(id)}>{label}</button>)}
+          </nav>
+          <div className="settings-sidebar-bottom"><span>Yaza AI</span><span>Administrator tools</span></div>
+        </aside>
+        <main className="settings-content admin-content">
+          <div className="settings-mobile-heading"><strong>Admin Center</strong><button className="settings-close" onClick={() => setAdminOpen(false)} aria-label="Close admin dashboard"><X size={18}/></button></div>
+          {adminBusy && <div className="admin-loading">Loading platform statistics…</div>}
+          {adminData && <>
+            {adminTab === "overview" && <section className="settings-panel-section"><h2>Platform overview</h2><p className="settings-panel-intro">A snapshot of Yaza AI activity and the controls available to administrators.</p>
           <div className="admin-stat-grid">
             <div className="admin-stat"><span>Total users</span><strong>{adminData.stats.users}</strong></div>
             <div className="admin-stat"><span>Conversations</span><strong>{adminData.stats.conversations}</strong></div>
             <div className="admin-stat"><span>Messages</span><strong>{adminData.stats.messages}</strong></div>
             <div className="admin-stat"><span>Active providers</span><strong>{adminData.providers.length}</strong></div>
           </div>
+
+              <div className="settings-info-note">Use the sections on the left to manage Wachabe routing and model prices, review wallet activity, monitor provider usage, and inspect recent accounts. Message contents and passwords are never displayed here.</div>
+              <div className="settings-option"><div><strong>Last updated</strong><span>{new Date(adminData.generatedAt).toLocaleString()}</span></div><span className="settings-chip">Live report</span></div>
+            </section>}
+            {adminTab === "models" && <section className="settings-panel-section"><h2>AI models & pricing</h2><p className="settings-panel-intro">Control the model behind Wachabe and configure which models customers can use and what they pay.</p>
           <div className="admin-section-title">YAZA AI MODEL</div>
           <div className="admin-model-config">
             <div className="admin-model-config-copy"><strong>Wachabe</strong><span>Choose the underlying AI provider and model used whenever anyone selects Yaza AI · Wachabe.</span></div>
@@ -1172,6 +1189,9 @@ function App() {
               </div>;
             })}
           </div>
+
+            </section>}
+            {adminTab === "billing" && <section className="settings-panel-section"><h2>Payments & wallet</h2><p className="settings-panel-intro">Review customer deposits and wallet charges recorded in the transaction ledger.</p>
           <div className="admin-section-title">PAYMENTS & WALLET REVENUE</div>
           <div className="admin-stat-grid usage-admin-grid">
             <div className="admin-stat"><span>Wallet accounts</span><strong>{adminData.wallet?.accounts || 0}</strong></div>
@@ -1181,6 +1201,9 @@ function App() {
           </div>
           <div className="admin-footnote">Wallet totals are based on the transaction ledger. They represent customer deposits and usage charges, not net profit or provider expenses. The transaction sample may be limited to the latest 10,000 entries.</div>
           <div className="usage-model-list">{(adminData.wallet?.revenueByModel || []).map(item => <div key={item.modelKey}><span>{item.label}</span><strong>MK {(Number(item.amountMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>)}{!(adminData.wallet?.revenueByModel || []).length && <div className="settings-info-note">No paid model usage has been recorded yet.</div>}</div>
+
+            </section>}
+            {adminTab === "usage" && <section className="settings-panel-section"><h2>Usage & costs</h2><p className="settings-panel-intro">Monitor request volumes, estimated token consumption, reported provider costs and customer usage.</p>
           <div className="admin-section-title">API USAGE & COST TRACKING</div>
           <div className="admin-stat-grid usage-admin-grid">
             <div className="admin-stat"><span>Requests today</span><strong>{adminData.usage?.todayRequests ?? 0}</strong></div>
@@ -1206,13 +1229,21 @@ function App() {
             {(adminData.usage?.byUser || []).map((item,index) => <div className="admin-table-row" key={index}><span>{item.account}</span><strong>{item.requests}</strong><span>{(item.estimatedInputTokens + item.estimatedOutputTokens).toLocaleString()}</span><strong>${Number(item.reportedCostUsd || 0).toFixed(4)}</strong><strong>MK {(Number(item.billedAmountMinor || 0)/100).toLocaleString(undefined,{maximumFractionDigits:2})}</strong></div>)}
             {!(adminData.usage?.byUser || []).length && <div className="admin-empty">No signed-in account usage recorded yet.</div>}
           </div>
+
+            </section>}
+            {adminTab === "accounts" && <section className="settings-panel-section"><h2>User accounts</h2><p className="settings-panel-intro">Review recently created accounts and their sign-in activity.</p>
           <div className="admin-section-title">RECENT ACCOUNTS</div>
           <div className="admin-users">
             {adminData.users.map(user => <div className="admin-user" key={user.id}><div className="avatar">{(user.email?.[0] || "Y").toUpperCase()}</div><div><strong>{user.email || "No email"}</strong><span>Joined {user.created_at ? new Date(user.created_at).toLocaleDateString() : "unknown"} · Last sign-in {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : "Never"}</span></div></div>)}
             {!adminData.users.length && <div className="admin-empty">No accounts found.</div>}
           </div>
           <div className="admin-footnote">Updated {new Date(adminData.generatedAt).toLocaleString()}. Account list shows the latest {adminData.users.length} users; provider counts are based on stored messages.</div>
-        </>}
+
+            </section>}
+          </>}
+          {!adminBusy && !adminData && <div className="settings-info-note">No administration data is available. Close this window and try again.</div>}
+          <div className="settings-content-footer"><span>Restricted administrator area</span><button onClick={() => setAdminOpen(false)}>Done</button></div>
+        </main>
       </section>
     </div>}
 
