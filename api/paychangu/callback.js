@@ -1,4 +1,4 @@
-import { getAdminClient, verifyAndCreditTopup } from "../_lib/paychangu.js";
+import { getAdminClient, verifyAndCreditTopup } from "../../lib/paychangu.js";
 
 function baseUrl() {
   return String(process.env.APP_URL || "https://yaza-ai.vercel.app").replace(/\/$/, "");
