@@ -50,6 +50,9 @@ function App() {
   const [readAloudEnabled, setReadAloudEnabled] = useState(true);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [preferencesStatus, setPreferencesStatus] = useState("This browser");
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deleteAccountPhrase, setDeleteAccountPhrase] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -701,6 +704,21 @@ function App() {
     } finally { setSending(false); textareaRef.current?.focus(); }
   }
   function handleSubmit(e) { e.preventDefault(); if (imageMode) generateImage(); else sendMessage(); }
+  async function permanentlyDeleteAccount() {
+    if (!session?.access_token || deleteAccountPhrase !== "DELETE MY ACCOUNT" || deletingAccount) return;
+    setDeletingAccount(true); setNotice("");
+    try {
+      const response = await fetch("/api/account", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token }, body: JSON.stringify({ confirmation: deleteAccountPhrase }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Account deletion failed. Your account has not been confirmed as deleted.");
+      await supabase.auth.signOut({ scope: "local" });
+      setSession(null); setChats([makeChat()]); setActiveId(null); setMemories([]); setAdminAccess(false); setAdminData(null);
+      setDeleteAccountOpen(false); setDeleteAccountPhrase(""); setSettingsOpen(false);
+      setNotice("Your Yaza account and associated cloud data have been deleted.");
+    } catch (error) { setNotice(error.message || "Could not delete your account."); }
+    finally { setDeletingAccount(false); }
+  }
+
   function exportChatData() {
     const payload = { exportedAt: new Date().toISOString(), product: "Yaza AI", conversations: chats.map(chat => ({ id: chat.id, title: chat.title, updatedAt: new Date(chat.updatedAt || Date.now()).toISOString(), messages: (chat.messages || []).map(message => ({ id: message.id, role: message.role, content: message.content, provider: message.provider || null, model: message.model || null, attachments: (message.attachments || []).map(({ id, name, type, kind, path }) => ({ id, name, type, kind, path })) })) })) };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -902,13 +920,24 @@ function App() {
           </section>}
           {settingsTab==="account" && <section className="settings-panel-section"><h2>Account</h2><p className="settings-panel-intro">Manage your Yaza AI sign-in.</p>
             <div className="settings-option"><div><strong>Email address</strong><span>{session?.user?.email || "You are using Yaza as a guest."}</span></div><span className="settings-chip">{session ? "Signed in" : "Guest"}</span></div>
-            {session ? <button className="settings-danger-action" onClick={() => { setSettingsOpen(false); signOut(); }}><LogOut size={16}/> Sign out</button> : <button className="settings-primary-action" onClick={() => { setSettingsOpen(false); setAuthMode("signin"); setAuthOpen(true); }}><LogIn size={16}/> Sign in or create an account</button>}
+            {session ? <><button className="settings-danger-action" onClick={() => { setDeleteAccountOpen(true); setDeleteAccountPhrase(""); }}><Trash2 size={16}/> Delete account and data</button><button className="settings-primary-action" onClick={() => { setSettingsOpen(false); signOut(); }}><LogOut size={16}/> Sign out</button></> : <button className="settings-primary-action" onClick={() => { setSettingsOpen(false); setAuthMode("signin"); setAuthOpen(true); }}><LogIn size={16}/> Sign in or create an account</button>}
           </section>}
           <div className="settings-content-footer"><span>{session ? preferencesStatus : "Saved on this browser"}</span><button onClick={() => setSettingsOpen(false)}>Done</button></div>
         </main>
       </section>
     </div>}
 
+    {deleteAccountOpen && <div className="auth-backdrop" onClick={() => { if (!deletingAccount) setDeleteAccountOpen(false); }}>
+      <section className="memory-dialog delete-account-dialog" onClick={event => event.stopPropagation()}>
+        <button className="auth-close" onClick={() => setDeleteAccountOpen(false)} aria-label="Close" disabled={deletingAccount}><X size={18}/></button>
+        <div className="auth-mark"><Trash2 size={20}/></div>
+        <h2>Delete your Yaza account?</h2>
+        <p>This permanently deletes your Yaza sign-in, conversations, messages, saved memories, preferences and uploaded chat files. This action cannot be undone.</p>
+        <label className="memory-list-title">Type DELETE MY ACCOUNT to confirm</label>
+        <input className="delete-account-input" value={deleteAccountPhrase} onChange={event => setDeleteAccountPhrase(event.target.value)} placeholder="DELETE MY ACCOUNT" autoComplete="off"/>
+        <button className="settings-danger-action delete-account-confirm" disabled={deleteAccountPhrase !== "DELETE MY ACCOUNT" || deletingAccount} onClick={permanentlyDeleteAccount}>{deletingAccount ? "Deleting account…" : "Permanently delete account"}</button>
+      </section>
+    </div>}
     {authOpen && <div className="auth-backdrop" onClick={() => setAuthOpen(false)}>
       <section className="auth-dialog" onClick={event => event.stopPropagation()}>
         <button className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close"><X size={18}/></button>
