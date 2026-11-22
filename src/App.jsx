@@ -740,7 +740,8 @@ function App() {
       let webSources = [];
       if (webSearchEnabled) {
         const searchResponse = await fetch("/api/search", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: "Bearer " + session.access_token } : {}) },
           body: JSON.stringify({ query: content || "information relevant to the attached file" })
         });
         const searchData = await searchResponse.json().catch(() => ({}));
