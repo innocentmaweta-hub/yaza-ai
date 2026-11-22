@@ -1170,7 +1170,7 @@ function App() {
   const suggestions = modeDetails.prompts;
 
   if (shareLoading) return <div className="shared-page"><div className="shared-card"><LogoSlot iconSize={20}/><p>Loading shared conversation…</p></div></div>;
-  if (shareError && !sharedView && new URLSearchParams(window.location.search).has("share")) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><h1>Shared conversation unavailable</h1><p>{shareError}</p><a href="/">Open Yaza AI</a></div></div>;
+  if (shareError && !sharedView && new URLSearchParams(window.location.search).has("share")) return <div className="shared-page"><div className="shared-card"><LogoSlot iconSize={20}/><h1>Shared conversation unavailable</h1><p>{shareError}</p><a href="/">Open Yaza AI</a></div></div>;
   if (sharedView) return <div className="shared-page"><header className="shared-topbar"><a href="/" className="shared-brand"><LogoSlot iconSize={17}/> yaza<span>ai</span></a><span><Link2 size={14}/> Shared conversation · Read only</span></header><main className="shared-content"><div className="shared-heading"><div className="eyebrow"><span></span> SHARED WITH YOU</div><h1>{sharedView.title || "Conversation"}</h1><p>Read-only copy · Attachments are not included</p></div>{(sharedView.messages || []).map((message,index) => <article className={`shared-message ${message.role}`} key={message.id || index}><div className="shared-message-author">{message.role === "assistant" ? <><Sparkles size={14}/> Yaza AI</> : "You"}</div><div className="shared-message-content">{renderMarkdown(message.content, code => navigator.clipboard?.writeText(code))}</div></article>)}<footer>Shared using <a href="/">Yaza AI</a></footer></main></div>;
   return <div className={`app-shell theme-${theme}`}>
     <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
@@ -1527,7 +1527,7 @@ function App() {
     {authOpen && <div className="auth-backdrop" onClick={() => setAuthOpen(false)}>
       <section className="auth-dialog" onClick={event => event.stopPropagation()}>
         <button className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close"><X size={18}/></button>
-        <div className="auth-mark"><Sparkles size={21}/></div>
+        <LogoSlot className="auth-mark" iconSize={21}/>
         <h2>{authMode === "signup" ? "Create your Yaza account" : "Welcome back"}</h2>
         <p>{authMode === "signup" ? "Your conversations, available wherever you sign in." : "Sign in to continue your conversations."}</p>
         <form onSubmit={submitAuth}>
