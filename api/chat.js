@@ -13,7 +13,7 @@ const PROVIDERS = {
 };
 
 const ALLOWED_MODELS = {
-  openai: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
+  openai: ["gpt-6.2-astra", "gpt-6.2-sol", "gpt-4.1-mini", "gpt-4.1", "o4-mini"],
   gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
   openrouter: ["openrouter/free"],
   kimi: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
@@ -454,7 +454,7 @@ export default async function handler(req, res) {
           { role: "system", content: systemInstruction },
           ...providerMessages
         ],
-        temperature: 0.7,
+        ...((provider === "openai" && ["gpt-6.2-astra", "gpt-6.2-sol"].includes(model)) ? { reasoning_effort: "medium" } : { temperature: 0.7 }),
         stream: true,
         ...(provider === "openai" ? { max_completion_tokens: 4096 } : { max_tokens: 4096 }),
         ...(provider === "kimi" ? {} : { stream_options: { include_usage: true } })
