@@ -36,6 +36,74 @@ function readProviderSettings() {
   }
 }
 
+
+function renderInlineMarkdown(value) {
+  const text = String(value || "");
+  const tokenPattern = /(\`[^\`]+\`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
+  return text.split(tokenPattern).filter(Boolean).map((part, index) => {
+    if (part.startsWith("\`") && part.endsWith("\`")) return <code className="md-inline-code" key={index}>{part.slice(1, -1)}</code>;
+    if ((part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"))) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("~~") && part.endsWith("~~")) return <del key={index}>{part.slice(2, -2)}</del>;
+    if ((part.startsWith("*") && part.endsWith("*")) || (part.startsWith("_") && part.endsWith("_"))) return <em key={index}>{part.slice(1, -1)}</em>;
+    const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+    if (link) return <a key={index} href={link[2]} target="_blank" rel="noopener noreferrer">{link[1]}</a>;
+    return part;
+  });
+}
+
+function renderMarkdown(content, onCopyCode) {
+  const lines = String(content || "").replace(/\r\n?/g, "\n").split("\n");
+  const blocks = [];
+  let index = 0;
+  const isSpecial = line => /^\s*(```|#{1,6}\s|>|[-*+]\s|\d+[.)]\s)/.test(line) || (line.includes("|") && index + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[index + 1]));
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) { index++; continue; }
+    const fence = line.match(/^\s*```\s*([\w+-]*)\s*$/);
+    if (fence) {
+      index++;
+      const codeLines = [];
+      while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) codeLines.push(lines[index++]);
+      if (index < lines.length) index++;
+      const code = codeLines.join("\n");
+      blocks.push(<div className="md-code-block" key={blocks.length}><div className="md-code-toolbar"><span>{fence[1] || "Code"}</span><button type="button" onClick={() => onCopyCode(code)}>Copy code</button></div><pre><code>{code}</code></pre></div>);
+      continue;
+    }
+    const heading = line.match(/^\s*(#{1,6})\s+(.+)$/);
+    if (heading) { const level = heading[1].length; const Tag = `h${level}`; blocks.push(<Tag key={blocks.length}>{renderInlineMarkdown(heading[2])}</Tag>); index++; continue; }
+    if (line.includes("|") && index + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[index + 1])) {
+      const cells = row => row.trim().replace(/^\||\|$/g, "").split("|").map(cell => cell.trim());
+      const headers = cells(line);
+      index += 2;
+      const rows = [];
+      while (index < lines.length && lines[index].includes("|") && lines[index].trim()) rows.push(cells(lines[index++]));
+      blocks.push(<div className="md-table-wrap" key={blocks.length}><table><thead><tr>{headers.map((cell,i)=><th key={i}>{renderInlineMarkdown(cell)}</th>)}</tr></thead><tbody>{rows.map((row,r)=><tr key={r}>{headers.map((_,i)=><td key={i}>{renderInlineMarkdown(row[i] || "")}</td>)}</tr>)}</tbody></table></div>);
+      continue;
+    }
+    if (/^\s*>/.test(line)) {
+      const quote = [];
+      while (index < lines.length && /^\s*>/.test(lines[index])) quote.push(lines[index++].replace(/^\s*>\s?/, ""));
+      blocks.push(<blockquote key={blocks.length}>{quote.map((item,i)=><React.Fragment key={i}>{i>0 && <br/>}{renderInlineMarkdown(item)}</React.Fragment>)}</blockquote>);
+      continue;
+    }
+    if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+      const ordered = /^\s*\d+[.)]\s+/.test(line);
+      const items = [];
+      while (index < lines.length && (ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*+]\s+/).test(lines[index])) {
+        items.push(lines[index++].replace(ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*+]\s+/, ""));
+      }
+      const Tag = ordered ? "ol" : "ul";
+      blocks.push(<Tag key={blocks.length}>{items.map((item,i)=><li key={i}>{renderInlineMarkdown(item)}</li>)}</Tag>);
+      continue;
+    }
+    const paragraph = [line];
+    index++;
+    while (index < lines.length && lines[index].trim() && !isSpecial(lines[index])) paragraph.push(lines[index++]);
+    blocks.push(<p key={blocks.length}>{paragraph.map((item,i)=><React.Fragment key={i}>{i>0 && <br/>}{renderInlineMarkdown(item)}</React.Fragment>)}</p>);
+  }
+  return <div className="markdown-content">{blocks}</div>;
+}
+
 function App() {
   const [chats, setChats] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE)) || [makeChat()]; }
@@ -855,7 +923,7 @@ function App() {
 
   if (shareLoading) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><p>Loading shared conversation…</p></div></div>;
   if (shareError && !sharedView && new URLSearchParams(window.location.search).has("share")) return <div className="shared-page"><div className="shared-card"><div className="brand-mark"><Sparkles size={20}/></div><h1>Shared conversation unavailable</h1><p>{shareError}</p><a href="/">Open Yaza AI</a></div></div>;
-  if (sharedView) return <div className="shared-page"><header className="shared-topbar"><a href="/" className="shared-brand"><span className="brand-mark"><Sparkles size={17}/></span> yaza<span>ai</span></a><span><Link2 size={14}/> Shared conversation · Read only</span></header><main className="shared-content"><div className="shared-heading"><div className="eyebrow"><span></span> SHARED WITH YOU</div><h1>{sharedView.title || "Conversation"}</h1><p>Read-only copy · Attachments are not included</p></div>{(sharedView.messages || []).map((message,index) => <article className={`shared-message ${message.role}`} key={message.id || index}><div className="shared-message-author">{message.role === "assistant" ? <><Sparkles size={14}/> Yaza AI</> : "You"}</div><div className="shared-message-content">{message.content}</div></article>)}<footer>Shared using <a href="/">Yaza AI</a></footer></main></div>;
+  if (sharedView) return <div className="shared-page"><header className="shared-topbar"><a href="/" className="shared-brand"><span className="brand-mark"><Sparkles size={17}/></span> yaza<span>ai</span></a><span><Link2 size={14}/> Shared conversation · Read only</span></header><main className="shared-content"><div className="shared-heading"><div className="eyebrow"><span></span> SHARED WITH YOU</div><h1>{sharedView.title || "Conversation"}</h1><p>Read-only copy · Attachments are not included</p></div>{(sharedView.messages || []).map((message,index) => <article className={`shared-message ${message.role}`} key={message.id || index}><div className="shared-message-author">{message.role === "assistant" ? <><Sparkles size={14}/> Yaza AI</> : "You"}</div><div className="shared-message-content">{renderMarkdown(message.content, code => navigator.clipboard?.writeText(code))}</div></article>)}<footer>Shared using <a href="/">Yaza AI</a></footer></main></div>;
   return <div className={`app-shell theme-${theme}`}>
     <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
       <div className="side-top">
@@ -937,7 +1005,7 @@ function App() {
         </div> : <div className="messages-wrap">
           {messages.map((m,i) => <article className={`message ${m.role}`} key={m.id || i}>
             {m.role === "assistant" ? <div className="message-avatar"><Sparkles size={16}/></div> : <div className="user-avatar">Y</div>}
-            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.content || (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => toggleSpeak(m)} title={!readAloudEnabled ? "Read aloud is disabled in Settings" : speakingMessageId === m.id ? "Stop reading" : "Read response aloud"} aria-label={speakingMessageId === m.id ? "Stop reading response" : "Read response aloud"} disabled={!readAloudEnabled} className={speakingMessageId === m.id ? "speaking-control" : ""}>{speakingMessageId === m.id ? <MicOff size={13}/> : <AudioLines size={13}/>} {speakingMessageId === m.id ? "Stop" : "Read aloud"}</button><button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
+            <div className="message-body"><div className="message-author">{m.role === "assistant" ? "Yaza AI" : "You"}</div><div className="message-content">{m.attachments?.length > 0 && <div className="sent-attachments">{m.attachments.map(file => <button type="button" className="sent-attachment" key={file.id} onClick={() => openAttachment(file)} title="Open saved attachment">{file.kind === "image" ? <ImagePlus size={13}/> : <FileText size={13}/>} {file.name}</button>)}</div>}{m.content ? renderMarkdown(m.content, code => navigator.clipboard?.writeText(code)) : (m.streaming ? <span className="typing"><i></i><i></i><i></i><span>Thinking</span></span> : "")}</div>{m.role === "assistant" && !m.streaming && m.content && <div className="message-meta">{m.provider && <span>{PROVIDERS[m.provider]?.label || m.provider}</span>}<button onClick={() => toggleSpeak(m)} title={!readAloudEnabled ? "Read aloud is disabled in Settings" : speakingMessageId === m.id ? "Stop reading" : "Read response aloud"} aria-label={speakingMessageId === m.id ? "Stop reading response" : "Read response aloud"} disabled={!readAloudEnabled} className={speakingMessageId === m.id ? "speaking-control" : ""}>{speakingMessageId === m.id ? <MicOff size={13}/> : <AudioLines size={13}/>} {speakingMessageId === m.id ? "Stop" : "Read aloud"}</button><button onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy response"><FileText size={13}/> Copy</button></div>}</div>
           </article>)}
           <div ref={endRef}/>
         </div>}
