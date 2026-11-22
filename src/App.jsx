@@ -52,6 +52,7 @@ function App() {
   const [modelMenu, setModelMenu] = useState(false);
   const [search, setSearch] = useState("");
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [imageMode, setImageMode] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
   const recognitionRef = useRef(null);
@@ -478,7 +479,45 @@ function App() {
     setSpeakingMessageId(message.id);
     window.speechSynthesis.speak(utterance);
   }
-  function handleSubmit(e) { e.preventDefault(); sendMessage(); }
+  async function generateImage() {
+    const content = prompt.trim();
+    if (!content || sending) return;
+    if (!supabase || !session?.user) {
+      setNotice("Sign in to create and permanently save images to your Yaza AI account.");
+      setAuthMode("signin"); setAuthOpen(true); return;
+    }
+    let chat = activeChat;
+    if (!chat) { chat = makeChat(); setChats(old => [chat, ...old]); setActiveId(chat.id); }
+    const userMessageId = crypto.randomUUID();
+    const assistantMessageId = crypto.randomUUID();
+    const userMessage = { id: userMessageId, role: "user", content };
+    const pendingMessage = { id: assistantMessageId, role: "assistant", content: "Creating your image…", provider: "openrouter", model: "image generation", streaming: true };
+    setPrompt(""); setSending(true); setNotice("");
+    updateChat(chat.id, current => ({ ...current, title: current.messages.length ? current.title : content.slice(0, 42) + (content.length > 42 ? "…" : ""), messages: [...current.messages, userMessage, pendingMessage] }));
+    try {
+      const response = await fetch("/api/images", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: content })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Image generation failed.");
+      if (!data.image || typeof data.image !== "string" || !data.image.startsWith("data:image/")) throw new Error("The image provider returned no usable image.");
+      const blob = await fetch(data.image).then(result => result.blob());
+      const fileId = crypto.randomUUID();
+      const fileName = `yaza-image-${new Date().toISOString().replace(/[:.]/g, "-")}.${blob.type.includes("jpeg") ? "jpg" : blob.type.includes("webp") ? "webp" : "png"}`;
+      const path = `${session.user.id}/${chat.id}/${assistantMessageId}/${fileId}-${fileName}`;
+      const { error: uploadError } = await supabase.storage.from("chat-attachments").upload(path, blob, { contentType: blob.type || "image/png", upsert: false });
+      if (uploadError) throw new Error(`The image was generated, but permanent storage failed: ${uploadError.message}`);
+      const attachment = { id: fileId, name: fileName, type: blob.type || "image/png", kind: "image", path };
+      updateChat(chat.id, current => ({ ...current, messages: current.messages.map(message => message.id === assistantMessageId ? { ...message, content: data.cost != null ? `Image created successfully. Generation cost: ${Number(data.cost).toFixed(4)}.` : "Image created successfully.", attachments: [attachment], model: data.model || "OpenRouter image model", streaming: false } : message) }));
+      setImageMode(false);
+    } catch (error) {
+      updateChat(chat.id, current => ({ ...current, messages: current.messages.filter(message => message.id !== assistantMessageId) }));
+      setPrompt(content);
+      setNotice(error.message || "Could not create your image. Please try again.");
+    } finally { setSending(false); textareaRef.current?.focus(); }
+  }
+  function handleSubmit(e) { e.preventDefault(); if (imageMode) generateImage(); else sendMessage(); }
   function handlePromptKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
@@ -551,9 +590,9 @@ function App() {
         {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}><X size={14}/></button></div>}
         <form className="composer" onSubmit={handleSubmit}>
           {attachments.length > 0 && <div className="attachment-list">{attachments.map(file => <div className="attachment-chip" key={file.id}><span className="attachment-icon">{file.kind === "image" ? <ImagePlus size={14}/> : <FileText size={14}/>}</span><span className="attachment-name">{file.name}</span><button type="button" onClick={() => setAttachments(old => old.filter(item => item.id !== file.id))} aria-label={`Remove ${file.name}`}><X size={13}/></button></div>)}</div>}
-          <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder="Message Yaza AI..." rows={1} disabled={sending}/>
+          <textarea ref={textareaRef} value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={handlePromptKey} placeholder={imageMode ? "Describe the image you want Yaza AI to create..." : "Message Yaza AI..."} rows={1} disabled={sending}/>
           <div className="composer-bottom">
-            <div className="composer-tools"><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className={`tool-btn tool-label ${voiceListening ? "tool-active voice-active" : ""}`} onClick={toggleVoiceInput} aria-pressed={voiceListening} title={voiceListening ? "Stop voice input" : "Start voice input"} disabled={sending}><>{voiceListening ? <MicOff size={15}/> : <Mic size={15}/>} <span>{voiceListening ? "Listening" : "Voice"}</span></></button></div>
+            <div className="composer-tools"><button type="button" className={`tool-btn tool-label ${imageMode ? "tool-active" : ""}`} onClick={() => setImageMode(value => !value)} aria-pressed={imageMode} title={imageMode ? "Return to chat" : "Create an image"} disabled={sending}><ImagePlus size={15}/> <span>{imageMode ? "Image mode on" : "Create image"}</span></button><button type="button" className="tool-btn" title="Attach files" onClick={() => fileInputRef.current?.click()}><Plus size={18}/></button><input ref={fileInputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.sql,.log" hidden onChange={e => addFiles(e.target.files)}/><button type="button" className={`tool-btn tool-label ${webSearchEnabled ? "tool-active" : ""}`} onClick={() => setWebSearchEnabled(value => !value)} aria-pressed={webSearchEnabled} title={webSearchEnabled ? "Turn web search off" : "Turn web search on"}><Globe2 size={15}/> <span>{webSearchEnabled ? "Search on" : "Search"}</span></button><button type="button" className={`tool-btn tool-label ${voiceListening ? "tool-active voice-active" : ""}`} onClick={toggleVoiceInput} aria-pressed={voiceListening} title={voiceListening ? "Stop voice input" : "Start voice input"} disabled={sending}><>{voiceListening ? <MicOff size={15}/> : <Mic size={15}/>} <span>{voiceListening ? "Listening" : "Voice"}</span></></button></div>
             <div className="send-side"><span className="enter-hint">↵ to send</span><button type="submit" className="send-btn" disabled={(!prompt.trim() && !attachments.length) || sending} aria-label="Send message">{sending ? <span className="send-spinner"/> : <ArrowUp size={18}/>}</button></div>
           </div>
         </form>
