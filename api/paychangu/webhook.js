@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "Invalid webhook signature." });
     }
     const payload = JSON.parse(raw.toString("utf8") || "{}");
-    const txRef = String(payload.tx_ref || payload.data?.tx_ref || "");
+    const txRef = String(payload.tx_ref || payload.data?.tx_ref || payload.meta?.tx_ref || payload.data?.meta?.tx_ref || "");
     if (!txRef) return res.status(400).json({ error: "Missing transaction reference." });
     const result = await verifyAndCreditTopup(getAdminClient(), txRef);
     if (result.status === "not_found") return res.status(404).json({ error: "Unknown transaction reference." });
