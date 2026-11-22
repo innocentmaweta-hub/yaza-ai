@@ -323,3 +323,13 @@
 .shared-page:has(.shared-card){display:grid;place-items:center}
 .theme-light .share-conversation-btn{color:#33343d;border-color:#dedfe5}
 @media(max-width:640px){.share-conversation-btn{padding:7px 9px;font-size:10px}.top-actions{gap:7px}.shared-topbar{padding:0 16px}.shared-content{padding-top:35px}.share-dialog{padding:22px}}
+
+
+.modal-backdrop{position:fixed;inset:0;z-index:130;display:grid;place-items:center;padding:18px;background:rgba(5,6,9,.78);backdrop-filter:blur(8px)}
+.modal-close{position:absolute;top:13px;right:13px;width:31px;height:31px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:#a6a6b1}
+.modal-close:hover{background:#34353e;color:#fff}
+.theme-light .share-dialog{background:#fff;color:#292a31;border-color:#dedfe5}
+.theme-light .share-dialog>p{color:#686b76}
+.theme-light .share-url-row input{background:#f7f7f9;color:#30313a;border-color:#dedfe5}
+.theme-light .share-privacy-note{background:#f1f7f2;border-color:#d7e8da;color:#426e4d}
+.theme-light .share-revoke-btn{background:#f2f2f5;color:#494b55;border-color:#dedfe5}
