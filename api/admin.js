@@ -162,7 +162,6 @@ export default async function handler(req, res) {
         user.estimatedInputTokens += Number(event.input_tokens_estimate || 0);
         user.estimatedOutputTokens += Number(event.output_tokens_estimate || 0);
         user.reportedCostUsd += Number(event.reported_cost_usd || 0);
-        user.billedAmountMinor += Number(event.billed_amount_minor || 0);
         usageByUser.set(event.user_id, user);
       }
     }
