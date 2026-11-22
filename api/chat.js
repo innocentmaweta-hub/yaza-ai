@@ -225,6 +225,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Attach no more than 10 files or scanned pages at once." });
   }
   const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+  if (!messages.length && attachments.length) messages.push({ role: "user", content: "Please review the attached files." });
   if (attachments.filter(file => file?.kind === "image").length > 10) {
     return res.status(400).json({ error: "Too many image pages. Attach fewer scanned pages and try again." });
   }
