@@ -92,7 +92,7 @@ function renderInlineMarkdown(value) {
     if (/^(?:https?:\/\/|www\.)/i.test(part)) {
       const trailing = part.match(/[.,!?;:]+$/)?.[0] || "";
       const url = trailing ? part.slice(0, -trailing.length) : part;
-      const href = /^www\./i.test(url) ? \`https://\${url}\` : url;
+      const href = /^www\./i.test(url) ? "https://" + url : url;
       return <Fragment key={index}><a href={href} target="_blank" rel="noopener noreferrer">{url}</a>{trailing}</Fragment>;
     }
     return part;
