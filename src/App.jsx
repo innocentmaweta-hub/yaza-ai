@@ -612,6 +612,18 @@ function App() {
     }
     setShareBusy(true); setShareError(""); setShareUrl("");
     try {
+      const { error: conversationSaveError } = await supabase.from("conversations").upsert({
+        id: activeChat.id, user_id: session.user.id, title: activeChat.title,
+        is_archived: activeChat.isArchived === true,
+        updated_at: new Date(activeChat.updatedAt || Date.now()).toISOString()
+      });
+      if (conversationSaveError) throw conversationSaveError;
+      const messageRows = activeChat.messages.map(message => ({
+        id: message.id, conversation_id: activeChat.id, role: message.role, content: message.content,
+        provider: message.provider || null, model: message.model || null, attachments: message.attachments || []
+      }));
+      const { error: messageSaveError } = await supabase.from("messages").upsert(messageRows);
+      if (messageSaveError) throw messageSaveError;
       const response = await fetch("/api/share", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
