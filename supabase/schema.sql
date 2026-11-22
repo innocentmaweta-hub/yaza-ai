@@ -401,3 +401,74 @@ grant execute on function public.reserve_yaza_usage(uuid,uuid,text,text,text,tex
 grant execute on function public.settle_yaza_usage(uuid,bigint) to service_role;
 grant execute on function public.release_yaza_usage(uuid,text) to service_role;
 grant execute on function public.credit_yaza_topup(uuid,text,integer,jsonb) to service_role;
+
+
+-- Authenticated, per-account web-search quotas. Search counters are server-only.
+create table if not exists public.search_usage_counters (
+  subject_key text not null check (subject_key ~ '^[a-f0-9]{64}$'),
+  period_type text not null check (period_type in ('day','month')),
+  period_start date not null,
+  request_count integer not null default 0 check (request_count >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (subject_key, period_type, period_start)
+);
+alter table public.search_usage_counters enable row level security;
+revoke all on public.search_usage_counters from public, anon, authenticated;
+grant select, insert, update, delete on public.search_usage_counters to service_role;
+
+create or replace function public.consume_yaza_search_quota(
+  p_subject_key text,
+  p_daily_limit integer default 20,
+  p_monthly_limit integer default 300
+)
+returns table(allowed boolean, daily_used integer, monthly_used integer)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_day date := (now() at time zone 'UTC')::date;
+  v_month date := date_trunc('month', now() at time zone 'UTC')::date;
+  v_daily integer;
+  v_monthly integer;
+begin
+  if p_subject_key !~ '^[a-f0-9]{64}$'
+     or p_daily_limit < 1 or p_daily_limit > 1000000
+     or p_monthly_limit < 1 or p_monthly_limit > 1000000 then
+    raise exception 'Invalid search quota parameters';
+  end if;
+
+  insert into public.search_usage_counters(subject_key, period_type, period_start)
+  values (p_subject_key, 'day', v_day), (p_subject_key, 'month', v_month)
+  on conflict (subject_key, period_type, period_start) do nothing;
+
+  select request_count into v_daily
+  from public.search_usage_counters
+  where subject_key = p_subject_key and period_type = 'day' and period_start = v_day
+  for update;
+
+  select request_count into v_monthly
+  from public.search_usage_counters
+  where subject_key = p_subject_key and period_type = 'month' and period_start = v_month
+  for update;
+
+  if v_daily >= p_daily_limit or v_monthly >= p_monthly_limit then
+    return query select false, v_daily, v_monthly;
+    return;
+  end if;
+
+  update public.search_usage_counters
+  set request_count = request_count + 1, updated_at = now()
+  where subject_key = p_subject_key and period_type = 'day' and period_start = v_day
+  returning request_count into v_daily;
+
+  update public.search_usage_counters
+  set request_count = request_count + 1, updated_at = now()
+  where subject_key = p_subject_key and period_type = 'month' and period_start = v_month
+  returning request_count into v_monthly;
+
+  return query select true, v_daily, v_monthly;
+end;
+$$;
+revoke all on function public.consume_yaza_search_quota(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_yaza_search_quota(text, integer, integer) to service_role;
