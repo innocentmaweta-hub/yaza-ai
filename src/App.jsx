@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase.js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
@@ -83,7 +83,7 @@ function renderMarkdown(content, onCopyCode) {
     if (/^\s*>/.test(line)) {
       const quote = [];
       while (index < lines.length && /^\s*>/.test(lines[index])) quote.push(lines[index++].replace(/^\s*>\s?/, ""));
-      blocks.push(<blockquote key={blocks.length}>{quote.map((item,i)=><React.Fragment key={i}>{i>0 && <br/>}{renderInlineMarkdown(item)}</React.Fragment>)}</blockquote>);
+      blocks.push(<blockquote key={blocks.length}>{quote.map((item,i)=><Fragment key={i}>{i>0 && <br/>}{renderInlineMarkdown(item)}</Fragment>)}</blockquote>);
       continue;
     }
     if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
@@ -99,7 +99,7 @@ function renderMarkdown(content, onCopyCode) {
     const paragraph = [line];
     index++;
     while (index < lines.length && lines[index].trim() && !isSpecial(lines[index])) paragraph.push(lines[index++]);
-    blocks.push(<p key={blocks.length}>{paragraph.map((item,i)=><React.Fragment key={i}>{i>0 && <br/>}{renderInlineMarkdown(item)}</React.Fragment>)}</p>);
+    blocks.push(<p key={blocks.length}>{paragraph.map((item,i)=><Fragment key={i}>{i>0 && <br/>}{renderInlineMarkdown(item)}</Fragment>)}</p>);
   }
   return <div className="markdown-content">{blocks}</div>;
 }
