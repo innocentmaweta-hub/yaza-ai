@@ -281,7 +281,7 @@ function App() {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "attachment";
         const path = `${session.user.id}/${chat.id}/${userMessageId}/${file.id}-${safeName}`;
         const { error } = await supabase.storage.from("chat-attachments").upload(path, file.file, {
-          contentType: file.type, upsert: false
+          contentType: file.type || "text/plain", upsert: false
         });
         if (error) throw new Error(`Could not save ${file.name}: ${error.message}`);
         return { id: file.id, name: file.name, type: file.type, kind: file.kind, path };
